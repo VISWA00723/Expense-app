@@ -1,0 +1,67 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+lib/generated_plugin_registrant.dart
+.fvm/
+.fvm/flutter_sdk
+
+# iOS
+ios/.symlinks/
+ios/.generated/
+ios/Flutter/Flutter.podspec
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.xcframework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+ios/Podfile.lock
+
+# Android
+android/app/debug
+android/app/profile
+android/app/release
+android/app/outputs
+android/.gradle
+android/.idea
+android/local.properties
+android/gradle.properties
+android/gradlew
+android/gradlew.bat
+android/settings.gradle
+
+# Backend
+backend/node_modules/
+backend/.env
+backend/.env.local
+backend/npm-debug.log*
+backend/yarn-debug.log*
+backend/yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Generated files
+*.g.dart
+*.config.dart
+
+# Misc
+.env
+.env.local
+*.log
