@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 
+import 'package:flutter_timezone/flutter_timezone.dart';
+
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
@@ -44,7 +46,23 @@ class NotificationService {
 
     // Initialize timezone
     tz.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      if (kDebugMode) {
+        print('Could not get local timezone: $e');
+      }
+      // Fallback to UTC if detection fails
+      try {
+        tz.setLocalLocation(tz.getLocation('UTC'));
+      } catch (e) {
+        // If even UTC fails (unlikely), we might want to log it or handle it
+        if (kDebugMode) {
+          print('Could not set fallback timezone: $e');
+        }
+      }
+    }
 
     // Android initialization with notification channel
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
