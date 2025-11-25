@@ -132,7 +132,7 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
             title: drift.Value(expenseData.title),
             amount: drift.Value(expenseData.amount),
             categoryId: drift.Value(category.id),
-            date: drift.Value(DateFormat('yyyy-MM-dd').format(DateTime.now())), // Always use today
+            date: drift.Value(expenseData.date), // Use date from AI
             notes: drift.Value(expenseData.notes),
             createdAt: drift.Value(DateTime.now().toIso8601String()),
           ));

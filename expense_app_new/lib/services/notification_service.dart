@@ -143,11 +143,21 @@ class NotificationService {
     final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     
+    AndroidScheduleMode scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+
     if (androidPlugin != null) {
       final canSchedule = await androidPlugin.canScheduleExactNotifications();
       
       if (canSchedule == false) {
-        await androidPlugin.requestExactAlarmsPermission();
+        // Request permission and await result
+        final granted = await androidPlugin.requestExactAlarmsPermission();
+        if (granted == null || !granted) {
+          // Fallback to inexact scheduling if denied
+          scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
+          if (kDebugMode) {
+            print('Exact alarm permission denied. Using inexact scheduling.');
+          }
+        }
       }
     }
 
@@ -160,6 +170,7 @@ class NotificationService {
       minute: 0,
       title: 'Good Morning! 🌅',
       body: _getRandomMessage(_morningMessages),
+      scheduleMode: scheduleMode,
     );
 
     // Schedule afternoon notification
@@ -169,6 +180,7 @@ class NotificationService {
       minute: 0,
       title: 'Afternoon Reminder 📊',
       body: _getRandomMessage(_afternoonMessages),
+      scheduleMode: scheduleMode,
     );
 
     // Schedule night notification
@@ -178,6 +190,7 @@ class NotificationService {
       minute: 0,
       title: 'Good Night! 🌙',
       body: _getRandomMessage(_nightMessages),
+      scheduleMode: scheduleMode,
     );
   }
 
@@ -187,6 +200,7 @@ class NotificationService {
     required int minute,
     required String title,
     required String body,
+    required AndroidScheduleMode scheduleMode,
   }) async {
     final now = tz.TZDateTime.now(tz.local);
     var scheduledDate = tz.TZDateTime(
@@ -223,7 +237,7 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: scheduleMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
