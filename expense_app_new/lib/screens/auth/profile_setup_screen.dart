@@ -88,7 +88,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Categories loaded successfully!')),
         );
-        context.go('/dashboard');
+        context.go('/onboarding');
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

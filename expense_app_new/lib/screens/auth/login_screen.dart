@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/services/analytics_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -46,8 +47,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (success) {
       ref.read(currentUserProvider.notifier).state = authService.currentUser;
       await AnalyticsService.logLogin('email');
+      
       if (!mounted) return;
-      context.go('/dashboard');
+
+      // Check if user has seen onboarding
+      final prefs = await SharedPreferences.getInstance();
+      final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+      if (!hasSeenOnboarding) {
+        context.go('/onboarding');
+      } else {
+        context.go('/dashboard');
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid email or password')),

@@ -220,6 +220,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            
+            // App Guide Card
+            Card(
+              color: colorScheme.primaryContainer,
+              child: ListTile(
+                leading: Icon(Icons.help_outline, color: colorScheme.onPrimaryContainer),
+                title: Text(
+                  'App Guide',
+                  style: TextStyle(
+                    color: colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  'Learn how to use the app',
+                  style: TextStyle(color: colorScheme.onPrimaryContainer.withOpacity(0.8)),
+                ),
+                trailing: Icon(Icons.chevron_right, color: colorScheme.onPrimaryContainer),
+                onTap: () {
+                  print('🔘 App Guide button tapped');
+                  context.push('/onboarding');
+                },
+              ),
+            ),
             const SizedBox(height: 32),
 
             // Personal Information Section

@@ -12,6 +12,7 @@ import 'package:expense_app_new/screens/budget_screen.dart';
 import 'package:expense_app_new/screens/auth/login_screen.dart';
 import 'package:expense_app_new/screens/auth/signup_screen.dart';
 import 'package:expense_app_new/screens/auth/profile_setup_screen.dart';
+import 'package:expense_app_new/screens/onboarding_screen.dart';
 import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/providers/database_provider.dart';
 import 'package:expense_app_new/theme/app_theme.dart';
@@ -83,6 +84,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/budget',
         builder: (context, state) => const BudgetScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingScreen(),
       ),
     ],
   );
