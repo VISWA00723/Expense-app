@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:expense_app_new/providers/auth_provider.dart';
+import 'package:expense_app_new/services/analytics_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -44,6 +45,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (success) {
       ref.read(currentUserProvider.notifier).state = authService.currentUser;
+      await AnalyticsService.logLogin('email');
+      if (!mounted) return;
       context.go('/dashboard');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

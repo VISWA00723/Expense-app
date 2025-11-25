@@ -2,28 +2,49 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Modern Color Palette
-  static const Color primaryColor = Color(0xFF6366F1); // Indigo
-  static const Color secondaryColor = Color(0xFF8B5CF6); // Purple
-  static const Color tertiaryColor = Color(0xFFEC4899); // Pink
-  static const Color accentColor = Color(0xFF14B8A6); // Teal
+  // Premium Color Palette
+  static const Color primaryColor = Color(0xFF4F46E5); // Indigo 600
+  static const Color secondaryColor = Color(0xFF7C3AED); // Violet 600
+  static const Color tertiaryColor = Color(0xFFDB2777); // Pink 600
+  static const Color accentColor = Color(0xFF0EA5E9); // Sky 500
+  static const Color surfaceColor = Color(0xFFF8FAFC); // Slate 50
+  static const Color darkSurfaceColor = Color(0xFF0F172A); // Slate 900
 
-  // Gradient Colors
+  // Premium Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+    colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
   );
 
   static const LinearGradient secondaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+    colors: [Color(0xFF7C3AED), Color(0xFFDB2777)],
   );
 
   static const LinearGradient accentGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF14B8A6), Color(0xFF06B6D4)],
+    colors: [Color(0xFF0EA5E9), Color(0xFF6366F1)],
+  );
+
+  static const LinearGradient glassGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xCCFFFFFF),
+      Color(0x99FFFFFF),
+    ],
+  );
+
+  static const LinearGradient darkGlassGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xCC1E293B),
+      Color(0x991E293B),
+    ],
   );
 
   // Light Theme
@@ -36,32 +57,42 @@ class AppTheme {
       primary: primaryColor,
       secondary: secondaryColor,
       tertiary: tertiaryColor,
+      surface: surfaceColor,
+      surfaceContainerHighest: const Color(0xFFF1F5F9), // Slate 100
     ),
-    scaffoldBackgroundColor: const Color(0xFFFAFAFA),
+    scaffoldBackgroundColor: surfaceColor,
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFFFAFAFA),
+      backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        color: Color(0xFF1F2937),
+        color: Color(0xFF1E293B), // Slate 800
         fontSize: 20,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
       ),
+      iconTheme: IconThemeData(color: Color(0xFF1E293B)),
     ),
     cardTheme: CardThemeData(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.black.withOpacity(0.05)),
+      ),
       color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 16),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
         textStyle: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
         ),
       ),
     ),
@@ -76,53 +107,147 @@ class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFFF3F4F6),
+      fillColor: Colors.white,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.black.withOpacity(0.1)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: primaryColor, width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      labelStyle: const TextStyle(
-        color: Color(0xFF6B7280),
-        fontWeight: FontWeight.w500,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Colors.white,
+      selectedItemColor: primaryColor,
+      unselectedItemColor: Color(0xFF94A3B8), // Slate 400
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
     ),
   );
 
-  // Dark Theme
-  static ThemeData darkTheme = ThemeData(
+  // Dark Theme - Purple (Original)
+  static ThemeData darkThemePurple = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.dark,
-      primary: primaryColor,
-      secondary: secondaryColor,
-      tertiary: tertiaryColor,
+      primary: const Color(0xFF818CF8), // Indigo 400
+      secondary: const Color(0xFFA78BFA), // Violet 400
+      surface: const Color(0xFF0F172A), // Slate 900
+      surfaceContainerHighest: const Color(0xFF1E293B), // Slate 800
     ),
     scaffoldBackgroundColor: const Color(0xFF0F172A),
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF1E293B),
+      backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        color: Color(0xFFF1F5F9),
+        color: Colors.white,
         fontSize: 20,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
       ),
+      iconTheme: IconThemeData(color: Colors.white),
     ),
     cardTheme: CardThemeData(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: const Color(0xFF1E293B),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.white.withOpacity(0.05)),
+      ),
+      color: const Color(0xFF1E293B), // Slate 800
+      margin: const EdgeInsets.only(bottom: 16),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFF1E293B),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.05)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFF818CF8), width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Color(0xFF0F172A),
+      selectedItemColor: Color(0xFF818CF8),
+      unselectedItemColor: Color(0xFF64748B),
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+    ),
+  );
+
+  // Dark Theme - Black (New Default)
+  static ThemeData darkThemeBlack = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primaryColor,
+      brightness: Brightness.dark,
+      primary: const Color(0xFF818CF8), // Indigo 400
+      secondary: const Color(0xFFA78BFA), // Violet 400
+      surface: Colors.black,
+      surfaceContainerHighest: const Color(0xFF121212), // Dark Grey
+    ),
+    scaffoldBackgroundColor: Colors.black,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: true,
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      iconTheme: IconThemeData(color: Colors.white),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      color: const Color(0xFF121212), // Dark Grey
+      margin: const EdgeInsets.only(bottom: 16),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFF121212),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.05)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFF818CF8), width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Colors.black,
+      selectedItemColor: Color(0xFF818CF8),
+      unselectedItemColor: Color(0xFF64748B),
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
     ),
   );
 }

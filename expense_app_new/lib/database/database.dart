@@ -46,12 +46,36 @@ class Expenses extends Table {
   TextColumn get createdAt => text()();
 }
 
-@DriftDatabase(tables: [Users, Incomes, ExpenseCategories, Expenses])
+class Budgets extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  IntColumn get categoryId => integer()();
+  RealColumn get amount => real()();
+  TextColumn get month => text()(); // Format: 'yyyy-MM'
+  TextColumn get createdAt => text()();
+}
+
+class AiChatSessions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  TextColumn get title => text()();
+  TextColumn get createdAt => text()();
+}
+
+class AiChatMessages extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get sessionId => integer().references(AiChatSessions, #id)();
+  BoolColumn get isUser => boolean()(); // true = user, false = AI
+  TextColumn get content => text()();
+  TextColumn get createdAt => text()();
+}
+
+@DriftDatabase(tables: [Users, Incomes, ExpenseCategories, Expenses, Budgets, AiChatSessions, AiChatMessages])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -69,6 +93,13 @@ class AppDatabase extends _$AppDatabase {
           // Expenses table needs to be recreated with new schema
           await m.deleteTable('expenses');
           await m.create(expenses);
+        }
+        
+        // Migration from v2 to v3: Add Budgets and AI Chat tables
+        if (from < 3) {
+          await m.create(budgets);
+          await m.create(aiChatSessions);
+          await m.create(aiChatMessages);
         }
       },
     );
@@ -101,6 +132,14 @@ class AppDatabase extends _$AppDatabase {
     return total ?? 0.0;
   }
 
+  Stream<double> watchTotalIncomeForMonth(int userId, String month) {
+    return customSelect(
+      'SELECT SUM(amount) as total FROM incomes WHERE user_id = ? AND date LIKE ?',
+      variables: [Variable.withInt(userId), Variable.withString('$month%')],
+      readsFrom: {incomes},
+    ).watchSingleOrNull().map((row) => row?.read<double?>('total') ?? 0.0);
+  }
+
   // ===== CATEGORY OPERATIONS =====
   Future<int> addCategory(ExpenseCategoriesCompanion category) =>
       into(expenseCategories).insert(category);
@@ -117,6 +156,9 @@ class AppDatabase extends _$AppDatabase {
   
   Future<List<Expense>> getUserExpenses(int userId) =>
       (select(expenses)..where((tbl) => tbl.userId.equals(userId))).get();
+
+  Stream<List<Expense>> watchUserExpenses(int userId) =>
+      (select(expenses)..where((tbl) => tbl.userId.equals(userId))).watch();
   
   Future<List<Expense>> getExpensesByMonth(int userId, String month) =>
       (select(expenses)
@@ -134,6 +176,13 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(tbl) => OrderingTerm(expression: tbl.date, mode: OrderingMode.desc)])
             ..limit(limit))
           .get();
+
+  Stream<List<Expense>> watchRecentExpenses(int userId, int limit) =>
+      (select(expenses)
+            ..where((tbl) => tbl.userId.equals(userId))
+            ..orderBy([(tbl) => OrderingTerm(expression: tbl.date, mode: OrderingMode.desc)])
+            ..limit(limit))
+          .watch();
   
   Future<bool> updateExpense(Expense expense) => update(expenses).replace(expense);
   
@@ -148,6 +197,14 @@ class AppDatabase extends _$AppDatabase {
     ).getSingleOrNull();
     final total = result?.read<double?>('total');
     return total ?? 0.0;
+  }
+
+  Stream<double> watchTotalByMonth(int userId, String month) {
+    return customSelect(
+      'SELECT SUM(amount) as total FROM expenses WHERE user_id = ? AND date LIKE ?',
+      variables: [Variable.withInt(userId), Variable.withString('$month%')],
+      readsFrom: {expenses},
+    ).watchSingleOrNull().map((row) => row?.read<double?>('total') ?? 0.0);
   }
   
   Future<Map<String, double>> getSpendingByCategory(int userId) async {
@@ -165,6 +222,84 @@ class AppDatabase extends _$AppDatabase {
     }
     return map;
   }
+
+  Stream<Map<String, double>> watchSpendingByCategory(int userId) {
+    return customSelect(
+      '''SELECT ec.name, SUM(e.amount) as total FROM expenses e 
+         JOIN expense_categories ec ON e.category_id = ec.id 
+         WHERE e.user_id = ? GROUP BY ec.name''',
+      variables: [Variable.withInt(userId)],
+      readsFrom: {expenses, expenseCategories},
+    ).watch().map((rows) {
+      final map = <String, double>{};
+      for (final row in rows) {
+        map[row.read<String>('name')] = (row.read<double>('total')).toDouble();
+      }
+      return map;
+    });
+  }
+
+  // Get spending by category with IDs for color assignment
+  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId) {
+    return customSelect(
+      '''SELECT ec.id, ec.name, SUM(e.amount) as total FROM expenses e 
+         JOIN expense_categories ec ON e.category_id = ec.id 
+         WHERE e.user_id = ? GROUP BY ec.id, ec.name''',
+      variables: [Variable.withInt(userId)],
+      readsFrom: {expenses, expenseCategories},
+    ).watch().map((rows) {
+      return rows.map((row) => CategorySpending(
+        categoryId: row.read<int>('id'),
+        categoryName: row.read<String>('name'),
+        totalAmount: row.read<double>('total'),
+      )).toList();
+    });
+  }
+  // ===== BUDGET OPERATIONS =====
+  Future<int> setBudget(BudgetsCompanion budget) => into(budgets).insertOnConflictUpdate(budget);
+
+  Future<Budget?> getBudgetForCategory(int userId, int categoryId, String month) =>
+      (select(budgets)..where((tbl) => 
+        tbl.userId.equals(userId) & 
+        tbl.categoryId.equals(categoryId) & 
+        tbl.month.equals(month)
+      )).getSingleOrNull();
+
+  Stream<List<Budget>> watchBudgetsForMonth(int userId, String month) =>
+      (select(budgets)..where((tbl) => 
+        tbl.userId.equals(userId) & 
+        tbl.month.equals(month)
+      )).watch();
+
+  // ===== AI CHAT OPERATIONS =====
+  Future<int> createChatSession(AiChatSessionsCompanion session) => into(aiChatSessions).insert(session);
+
+  Stream<List<AiChatSession>> watchChatSessions(int userId) =>
+      (select(aiChatSessions)
+        ..where((tbl) => tbl.userId.equals(userId))
+        ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)])
+      ).watch();
+
+  Future<int> addChatMessage(AiChatMessagesCompanion message) => into(aiChatMessages).insert(message);
+
+  Stream<List<AiChatMessage>> watchChatMessages(int sessionId) =>
+      (select(aiChatMessages)
+        ..where((tbl) => tbl.sessionId.equals(sessionId))
+        ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc)])
+      ).watch();
+}
+
+// Helper class for category spending data
+class CategorySpending {
+  final int categoryId;
+  final String categoryName;
+  final double totalAmount;
+
+  CategorySpending({
+    required this.categoryId,
+    required this.categoryName,
+    required this.totalAmount,
+  });
 }
 
 LazyDatabase _openConnection() {

@@ -46,6 +46,11 @@ class ColorService {
     return categoryColors[index];
   }
 
+  // Get color by category ID (ensures unique colors without collisions)
+  static Color getColorById(int id) {
+    return categoryColors[id % categoryColors.length];
+  }
+
   // Get contrasting text color (white or black)
   static Color getContrastingTextColor(Color backgroundColor) {
     final luminance = backgroundColor.computeLuminance();

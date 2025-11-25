@@ -15,7 +15,7 @@ class ExpenseListScreen extends ConsumerStatefulWidget {
 }
 
 class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
-  String? _selectedMonth;
+  DateTime? _selectedDate;
   int? _selectedCategoryId;
 
   void _showEditDialog(BuildContext context, Expense expense) {
@@ -84,11 +84,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                   ),
                 );
                 
-                // Invalidate all related providers
-                ref.invalidate(userExpensesProvider);
-                ref.invalidate(currentMonthTotalProvider);
-                ref.invalidate(recentExpensesProvider);
-                ref.invalidate(spendingByCategoryProvider);
+                // Providers update automatically via Streams
                 
                 if (!mounted) return;
                 Navigator.pop(context);
@@ -157,19 +153,42 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Month Filter
-                TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Filter by Month (yyyy-mm)',
-                    hintText: '2024-01',
-                    prefixIcon: const Icon(Icons.calendar_today_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                // Date Filter
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() => _selectedDate = picked);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Filter by Date',
+                      prefixIcon: const Icon(Icons.calendar_today_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      suffixIcon: _selectedDate != null
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setState(() => _selectedDate = null),
+                            )
+                          : null,
+                    ),
+                    child: Text(
+                      _selectedDate != null
+                          ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
+                          : 'Select Date',
+                      style: _selectedDate != null
+                          ? null
+                          : TextStyle(color: Theme.of(context).hintColor),
                     ),
                   ),
-                  onChanged: (value) {
-                    setState(() => _selectedMonth = value.isEmpty ? null : value);
-                  },
                 ),
                 const SizedBox(height: 12),
                 // Category Filter
@@ -211,9 +230,10 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                 // Filter expenses
                 var filtered = expenses;
                 
-                if (_selectedMonth != null) {
+                if (_selectedDate != null) {
+                  final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
                   filtered = filtered
-                      .where((e) => e.date.startsWith(_selectedMonth!))
+                      .where((e) => e.date == dateStr)
                       .toList();
                 }
                 
@@ -233,7 +253,12 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    MediaQuery.of(context).viewInsets.bottom + 16,
+                  ),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final expense = filtered[index];
@@ -300,11 +325,10 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                                       ),
                                     );
 
-                                    if (confirm == true) {
-                                      final db = ref.read(databaseProvider);
-                                      await db.deleteExpense(expense.id);
-                                      ref.invalidate(userExpensesProvider);
-                                    }
+                                      if (confirm == true) {
+                                        final db = ref.read(databaseProvider);
+                                        await db.deleteExpense(expense.id);
+                                      }
                                   },
                                 ),
                               ),

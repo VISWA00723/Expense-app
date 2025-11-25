@@ -7,6 +7,9 @@ import 'package:expense_app_new/providers/api_provider.dart';
 import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/models/expense_model.dart';
 import 'package:expense_app_new/database/database.dart';
+import 'package:expense_app_new/theme/app_theme.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class AIAssistantScreen extends ConsumerStatefulWidget {
   const AIAssistantScreen({Key? key}) : super(key: key);
@@ -17,211 +20,264 @@ class AIAssistantScreen extends ConsumerStatefulWidget {
 
 class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
   late TextEditingController _questionController;
-  final List<ChatMessage> _messages = [];
+  int? _currentSessionId;
   bool _isLoading = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _questionController = TextEditingController();
+    // Auto-create session if none exists? No, wait for user action or load latest.
   }
 
   @override
   void dispose() {
     _questionController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendQuestion() async {
-    if (_questionController.text.isEmpty) return;
-
-    final question = _questionController.text;
-    _questionController.clear();
-
-    // Add user message
+  Future<void> _createNewSession([String title = 'New Chat']) async {
+    final db = ref.read(databaseProvider);
+    final user = ref.read(currentUserProvider);
+    
+    final id = await db.createChatSession(AiChatSessionsCompanion(
+      userId: drift.Value(user!.id),
+      title: drift.Value(title),
+      createdAt: drift.Value(DateTime.now().toIso8601String()),
+    ));
+    
     setState(() {
-      _messages.add(ChatMessage(
-        text: question,
-        isUser: true,
-      ));
-      _isLoading = true;
+      _currentSessionId = id;
     });
+  }
+
+  Future<void> _sendMessage({String? overrideText}) async {
+    final text = overrideText ?? _questionController.text.trim();
+    if (text.isEmpty) return;
+
+    _questionController.clear();
+    setState(() => _isLoading = true);
+
+    final db = ref.read(databaseProvider);
+    final user = ref.read(currentUserProvider);
+
+    // Create session if needed
+    if (_currentSessionId == null) {
+      await _createNewSession(text.length > 20 ? '${text.substring(0, 20)}...' : text);
+    }
+
+    // Save user message
+    await db.addChatMessage(AiChatMessagesCompanion(
+      sessionId: drift.Value(_currentSessionId!),
+      isUser: const drift.Value(true),
+      content: drift.Value(text),
+      createdAt: drift.Value(DateTime.now().toIso8601String()),
+    ));
 
     try {
-      // Get last 300 expenses for context
-      final db = ref.read(databaseProvider);
-      final user = ref.read(currentUserProvider);
+      // Get context (expenses)
       final expenses = await db.getRecentExpenses(user!.id, 300);
+      final expenseModels = expenses.map((e) => ExpenseModel(
+        id: e.id,
+        title: e.title,
+        amount: e.amount,
+        category: 'Category ${e.categoryId}',
+        notes: e.notes,
+        date: e.date,
+        createdAt: e.createdAt,
+      )).toList();
 
-      // Convert to ExpenseModel
-      final expenseModels = expenses
-          .map((e) => ExpenseModel(
-                id: e.id,
-                title: e.title,
-                amount: e.amount,
-                category: 'Category ${e.categoryId}',
-                notes: e.notes,
-                date: e.date,
-                createdAt: e.createdAt,
-              ))
-          .toList();
+      // Call AI
+      final response = await ref.read(apiServiceProvider).analyzeExpenses(
+        question: text,
+        expenses: expenseModels,
+      );
 
-      // Check if user wants to add an expense (natural language detection)
-      final isAddExpenseRequest = _isAddExpenseRequest(question);
+      // Save AI response
+      await db.addChatMessage(AiChatMessagesCompanion(
+        sessionId: drift.Value(_currentSessionId!),
+        isUser: const drift.Value(false),
+        content: drift.Value(response.answer),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
 
-      if (isAddExpenseRequest) {
-        // Get available categories
-        final categories = await db.getUserCategories(user.id);
-        final categoryNames = categories.map((c) => c.name).toList();
-
-        // Use AI to parse the natural language input
-        final response = await ref.read(apiServiceProvider).addExpenseWithAI(
-          naturalLanguageInput: question,
-          recentExpenses: expenseModels,
-          availableCategories: categoryNames,
-        );
-
-        // If expense data was parsed, add it to database
-        if (response.expenseData != null) {
-          final expenseData = response.expenseData!;
-          
-          // Find category ID by name
-          final category = categories.firstWhere(
-            (c) => c.name.toLowerCase() == expenseData.category.toLowerCase(),
-            orElse: () => categories.first,
-          );
-
-          // Add expense to database
-          await db.insertExpense(
-            ExpensesCompanion(
-              userId: drift.Value(user.id),
-              title: drift.Value(expenseData.title),
-              amount: drift.Value(expenseData.amount),
-              categoryId: drift.Value(category.id),
-              notes: expenseData.notes != null ? drift.Value(expenseData.notes) : drift.Value(null),
-              date: drift.Value(expenseData.date),
-              createdAt: drift.Value(DateTime.now().toIso8601String()),
-            ),
-          );
-
-          // Invalidate providers to refresh dashboard
-          ref.invalidate(spendingByCategoryProvider);
-          ref.invalidate(currentMonthTotalProvider);
-          ref.invalidate(recentExpensesProvider);
-
-          setState(() {
-            _messages.add(ChatMessage(
-              text: '✅ ${response.answer}\n\nExpense added: ${expenseData.title} - ₹${expenseData.amount} in ${expenseData.category}',
-              isUser: false,
-            ));
-            _isLoading = false;
-          });
-        } else {
-          setState(() {
-            _messages.add(ChatMessage(
-              text: response.answer,
-              isUser: false,
-            ));
-            _isLoading = false;
-          });
-        }
-      } else {
-        // Regular analysis or chat
-        final response = await ref.read(apiServiceProvider).analyzeExpenses(
-          question: question,
-          expenses: expenseModels,
-        );
-
-        setState(() {
-          _messages.add(ChatMessage(
-            text: response.answer,
-            isUser: false,
-          ));
-          _isLoading = false;
-        });
-      }
     } catch (e) {
-      setState(() {
-        String errorMessage = 'Error processing your request';
-        if (e.toString().contains('Connection refused') ||
-            e.toString().contains('Failed host lookup') ||
-            e.toString().contains('Connection errored')) {
-          errorMessage =
-              'Backend server not connected. Please ensure the backend is running.';
-        }
-        _messages.add(ChatMessage(
-          text: errorMessage,
-          isUser: false,
-        ));
-        _isLoading = false;
-      });
+      await db.addChatMessage(AiChatMessagesCompanion(
+        sessionId: drift.Value(_currentSessionId!),
+        isUser: const drift.Value(false),
+        content: drift.Value('Error: $e'),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
+    } finally {
+      setState(() => _isLoading = false);
+      // Scroll to bottom
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     }
   }
 
-  // Detect if user wants to add an expense
-  bool _isAddExpenseRequest(String input) {
-    final lowerInput = input.toLowerCase();
-    return lowerInput.contains('add') ||
-        lowerInput.contains('spent') ||
-        lowerInput.contains('expense') ||
-        lowerInput.contains('paid') ||
-        lowerInput.contains('cost') ||
-        lowerInput.contains('₹') ||
-        (lowerInput.contains('rupees') || lowerInput.contains('rs'));
+  Future<void> _generateInvestmentPlan() async {
+    final user = ref.read(currentUserProvider);
+    final db = ref.read(databaseProvider);
+    
+    // Calculate stats
+    final income = user!.monthlySalary;
+    final expenses = await db.watchTotalByMonth(user.id, DateFormat('yyyy-MM').format(DateTime.now())).first;
+    final savings = income - expenses;
+    
+    final prompt = "I have a monthly income of ₹$income and average expenses of ₹${expenses.toStringAsFixed(0)}. "
+        "I have ₹${savings.toStringAsFixed(0)} available for savings/investment. "
+        "Please provide a detailed investment plan including asset allocation (Stocks, Mutual Funds, Gold, FD) "
+        "and risk assessment. Format it as a clear guide.";
+
+    await _sendMessage(overrideText: prompt);
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
+    final sessionsAsync = ref.watch(chatSessionsProvider(user.id));
+    final messagesAsync = _currentSessionId != null 
+        ? ref.watch(chatMessagesProvider(_currentSessionId!))
+        : const AsyncValue.data(<AiChatMessage>[]);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Assistant'),
-        centerTitle: true,
+        title: const Text('AI Financial Coach'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _createNewSession(),
+            tooltip: 'New Chat',
+          ),
+        ],
+      ),
+      drawer: Drawer(
+        child: Column(
+          children: [
+            UserAccountsDrawerHeader(
+              accountName: Text(user.name),
+              accountEmail: Text(user.email),
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Text(user.name[0], style: const TextStyle(fontSize: 24)),
+              ),
+            ),
+            Expanded(
+              child: sessionsAsync.when(
+                data: (sessions) => ListView.builder(
+                  itemCount: sessions.length,
+                  itemBuilder: (context, index) {
+                    final session = sessions[index];
+                    return ListTile(
+                      leading: const Icon(Icons.chat_bubble_outline),
+                      title: Text(session.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(
+                        DateFormat('MMM d, h:mm a').format(DateTime.parse(session.createdAt)),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      selected: session.id == _currentSessionId,
+                      onTap: () {
+                        setState(() => _currentSessionId = session.id);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, s) => Center(child: Text('Error: $e')),
+              ),
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
+          // Quick Actions
+          if (_currentSessionId == null)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.trending_up),
+                    label: const Text('Generate Investment Plan'),
+                    onPressed: _generateInvestmentPlan,
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.pie_chart),
+                    label: const Text('Analyze Spending'),
+                    onPressed: () => _sendMessage(overrideText: "Analyze my spending patterns for this month"),
+                  ),
+                ],
+              ),
+            ),
+
           // Chat Messages
           Expanded(
-            child: _messages.isEmpty
-                ? Center(
+            child: messagesAsync.when(
+              data: (messages) {
+                if (messages.isEmpty && _currentSessionId == null) {
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.smart_toy_outlined,
+                          Icons.psychology,
                           size: 64,
-                          color: Theme.of(context).colorScheme.primary,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
                         ),
                         const SizedBox(height: 16),
-                        const Text('Ask me about your expenses!'),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Note: Backend required for AI features',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                        const Text('Start a conversation with your AI Coach'),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    reverse: true,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[_messages.length - 1 - index];
-                      return ChatBubble(message: message);
-                    },
-                  ),
+                  );
+                }
+                
+                // Reverse list for chat view
+                final reversedMessages = messages.reversed.toList();
+                
+                return ListView.builder(
+                  controller: _scrollController,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  itemCount: reversedMessages.length,
+                  itemBuilder: (context, index) {
+                    final message = reversedMessages[index];
+                    return ChatBubble(
+                      text: message.content,
+                      isUser: message.isUser,
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, s) => Center(child: Text('Error: $e')),
+            ),
           ),
 
-          // Input Area with padding for bottom nav
+          // Input Area
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              border: Border(
-                top: BorderSide(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
                 ),
-              ),
+              ],
             ),
             child: Row(
               children: [
@@ -229,28 +285,30 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                   child: TextField(
                     controller: _questionController,
                     decoration: InputDecoration(
-                      hintText: 'Ask anything or about your expenses...',
+                      hintText: 'Ask your financial coach...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
                       ),
+                      filled: true,
+                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+                        horizontal: 20,
                         vertical: 12,
                       ),
                     ),
-                    enabled: !_isLoading,
+                    onSubmitted: (_) => _isLoading ? null : _sendMessage(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
-                  onPressed: _isLoading ? null : _sendQuestion,
+                  onPressed: _isLoading ? null : () => _sendMessage(),
+                  elevation: 0,
                   child: _isLoading
                       ? const SizedBox(
                           width: 24,
                           height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.send),
                 ),
@@ -261,50 +319,19 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle),
-            label: 'Add',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.list),
-            label: 'Expenses',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.smart_toy),
-            label: 'AI',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.add_circle), label: 'Add'),
+          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Expenses'),
+          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'AI Coach'),
         ],
         currentIndex: 3,
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        selectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 12,
-        ),
         onTap: (index) {
           switch (index) {
-            case 0:
-              context.go('/dashboard');
-              break;
-            case 1:
-              context.go('/add');
-              break;
-            case 2:
-              context.go('/list');
-              break;
-            case 3:
-              context.go('/ai');
-              break;
+            case 0: context.go('/dashboard'); break;
+            case 1: context.go('/add'); break;
+            case 2: context.go('/list'); break;
+            case 3: break;
           }
         },
       ),
@@ -312,38 +339,47 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
   }
 }
 
-class ChatMessage {
+class ChatBubble extends StatelessWidget {
   final String text;
   final bool isUser;
 
-  ChatMessage({
-    required this.text,
-    required this.isUser,
-  });
-}
-
-class ChatBubble extends StatelessWidget {
-  final ChatMessage message;
-
-  const ChatBubble({Key? key, required this.message}) : super(key: key);
+  const ChatBubble({Key? key, required this.text, required this.isUser}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: message.isUser ? Colors.blue : Colors.grey[300],
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          message.text,
-          style: TextStyle(
-            color: message.isUser ? Colors.white : Colors.black,
+          color: isUser ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isUser ? 20 : 4),
+            bottomRight: Radius.circular(isUser ? 4 : 20),
           ),
         ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: isUser 
+          ? Text(
+              text,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: Colors.white,
+              ),
+            )
+          : MarkdownBody(
+              data: text,
+              styleSheet: MarkdownStyleSheet(
+                p: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                ),
+                strong: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
       ),
     );
   }

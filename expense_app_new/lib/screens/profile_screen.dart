@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:expense_app_new/providers/database_provider.dart';
 import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/services/auth_service.dart';
+import 'package:expense_app_new/providers/theme_provider.dart';
+import 'package:expense_app_new/services/notification_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -296,6 +298,168 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 32),
 
+            // Appearance Section
+            Text(
+              'Appearance',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            
+            Consumer(
+              builder: (context, ref, child) {
+                final themeState = ref.watch(themeProvider);
+                final notifier = ref.read(themeProvider.notifier);
+                
+                return Column(
+                  children: [
+                    // Theme Mode
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.brightness_6),
+                        title: const Text('Theme Mode'),
+                        trailing: DropdownButton<ThemeMode>(
+                          value: themeState.mode,
+                          underline: const SizedBox(),
+                          items: const [
+                            DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+                            DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
+                            DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+                          ],
+                          onChanged: (mode) {
+                            if (mode != null) notifier.setMode(mode);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Dark Theme Style
+                    if (themeState.mode != ThemeMode.light)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.palette),
+                          title: const Text('Dark Theme Style'),
+                          trailing: DropdownButton<String>(
+                            value: themeState.darkStyle,
+                            underline: const SizedBox(),
+                            items: const [
+                              DropdownMenuItem(value: 'black', child: Text('Pure Black')),
+                              DropdownMenuItem(value: 'purple', child: Text('Midnight Purple')),
+                            ],
+                            onChanged: (style) {
+                              if (style != null) notifier.setDarkStyle(style);
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 32),
+
+            // Notifications Section
+            Text(
+              'Notifications',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            
+            FutureBuilder<bool>(
+              future: NotificationService.isEnabled(),
+              builder: (context, snapshot) {
+                final isEnabled = snapshot.data ?? true;
+                
+                return Column(
+                  children: [
+                    Card(
+                      child: SwitchListTile(
+                        secondary: const Icon(Icons.notifications_active),
+                        title: const Text('Daily Reminders'),
+                        subtitle: const Text('Get reminded to track expenses'),
+                        value: isEnabled,
+                        onChanged: (value) async {
+                          if (value) {
+                            final granted = await NotificationService.requestPermission();
+                            if (granted) {
+                              await NotificationService.setEnabled(true);
+                              await NotificationService.scheduleDailyNotifications();
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Notifications enabled! You\'ll receive 3 daily reminders.')),
+                              );
+                              setState(() {});
+                            } else {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Permission denied. Enable in system settings.')),
+                              );
+                            }
+                          } else {
+                            await NotificationService.setEnabled(false);
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Notifications disabled')),
+                            );
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    ),
+                    if (isEnabled) ...[
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.schedule, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Notification Times',
+                                    style: Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              _buildTimeRow('Morning', '9:00 AM', Icons.wb_sunny),
+                              const SizedBox(height: 8),
+                              _buildTimeRow('Afternoon', '3:00 PM', Icons.wb_cloudy),
+                              const SizedBox(height: 8),
+                              _buildTimeRow('Night', '9:00 PM', Icons.nightlight_round),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await NotificationService.showTestNotification();
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Test notification sent!')),
+                            );
+                          },
+                          icon: const Icon(Icons.notifications),
+                          label: const Text('Test Notification'),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 32),
+
             // Security Section
             Text(
               'Security',
@@ -438,6 +602,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           }
         },
       ),
+    );
+  }
+
+  Widget _buildTimeRow(String label, String time, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        const Spacer(),
+        Text(time, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
     );
   }
 }

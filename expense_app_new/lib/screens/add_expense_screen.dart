@@ -67,9 +67,21 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         final db = ref.read(databaseProvider);
         final now = DateTime.now();
 
+        // Auto-generate title if empty
+        String finalTitle = _titleController.text.trim();
+        if (finalTitle.isEmpty) {
+          // Get category name for auto-generated title
+          final categories = await db.getUserCategories(user!.id);
+          final selectedCategory = categories.firstWhere(
+            (cat) => cat.id == _selectedCategoryId,
+            orElse: () => categories.first,
+          );
+          finalTitle = '${selectedCategory.name} expense';
+        }
+
         final expense = ExpensesCompanion(
           userId: drift.Value(user!.id),
-          title: drift.Value(_titleController.text),
+          title: drift.Value(finalTitle),
           amount: drift.Value(double.parse(_amountController.text)),
           categoryId: drift.Value(_selectedCategoryId!),
           notes: drift.Value(
@@ -145,7 +157,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
         child: Form(
           key: _formKey,
           child: Column(
@@ -155,19 +172,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               TextFormField(
                 controller: _titleController,
                 decoration: InputDecoration(
-                  labelText: 'Expense Title',
+                  labelText: 'Expense Title (Optional)',
                   hintText: 'e.g., Lunch at restaurant',
                   prefixIcon: const Icon(Icons.description_outlined),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                validator: (value) {
-                  if (value?.isEmpty ?? true) {
-                    return 'Please enter expense title';
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 16),
 
