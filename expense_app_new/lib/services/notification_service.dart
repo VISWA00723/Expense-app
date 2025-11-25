@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 
+import 'package:flutter_timezone/flutter_timezone.dart';
+
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
@@ -42,15 +44,27 @@ class NotificationService {
   static Future<void> initialize() async {
     if (_initialized) return;
 
-    if (kDebugMode) {
-      print('🔔 Initializing Notification Service...');
-    }
-
     // Initialize timezone
     tz.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      if (kDebugMode) {
+        print('Could not get local timezone: $e');
+      }
+      // Fallback to UTC if detection fails
+      try {
+        tz.setLocalLocation(tz.getLocation('UTC'));
+      } catch (e) {
+        // If even UTC fails (unlikely), we might want to log it or handle it
+        if (kDebugMode) {
+          print('Could not set fallback timezone: $e');
+        }
+      }
+    }
 
-    // Android initialization
+    // Android initialization with notification channel
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     
     // iOS initialization
@@ -70,33 +84,36 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
-    _initialized = true;
-    
-    if (kDebugMode) {
-      print('✅ Notification Service initialized');
-    }
-  }
-
-  static void _onNotificationTapped(NotificationResponse response) {
-    if (kDebugMode) {
-      print('🔔 Notification tapped: ${response.payload}');
-    }
-    // App is already open, just log the tap
-  }
-
-  static Future<bool> requestPermission() async {
-    if (kDebugMode) {
-      print('🔔 Requesting notification permission...');
-    }
+    // Create notification channel for Android
+    const androidChannel = AndroidNotificationChannel(
+      'daily_reminders',
+      'Daily Reminders',
+      description: 'Daily expense tracking reminders',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
 
     final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     
     if (androidPlugin != null) {
+      await androidPlugin.createNotificationChannel(androidChannel);
+    }
+
+    _initialized = true;
+  }
+
+  static void _onNotificationTapped(NotificationResponse response) {
+    // App is already open, just log the tap
+  }
+
+  static Future<bool> requestPermission() async {
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
       final granted = await androidPlugin.requestNotificationsPermission();
-      if (kDebugMode) {
-        print((granted ?? false) ? '✅ Permission granted' : '❌ Permission denied');
-      }
       return granted ?? false;
     }
 
@@ -122,8 +139,26 @@ class NotificationService {
   static Future<void> scheduleDailyNotifications() async {
     if (!await isEnabled()) return;
 
-    if (kDebugMode) {
-      print('🔔 Scheduling daily notifications...');
+    // Check if we have exact alarm permission (Android 12+)
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    AndroidScheduleMode scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+
+    if (androidPlugin != null) {
+      final canSchedule = await androidPlugin.canScheduleExactNotifications();
+      
+      if (canSchedule == false) {
+        // Request permission and await result
+        final granted = await androidPlugin.requestExactAlarmsPermission();
+        if (granted == null || !granted) {
+          // Fallback to inexact scheduling if denied
+          scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
+          if (kDebugMode) {
+            print('Exact alarm permission denied. Using inexact scheduling.');
+          }
+        }
+      }
     }
 
     await cancelAllNotifications();
@@ -135,6 +170,7 @@ class NotificationService {
       minute: 0,
       title: 'Good Morning! 🌅',
       body: _getRandomMessage(_morningMessages),
+      scheduleMode: scheduleMode,
     );
 
     // Schedule afternoon notification
@@ -144,6 +180,7 @@ class NotificationService {
       minute: 0,
       title: 'Afternoon Reminder 📊',
       body: _getRandomMessage(_afternoonMessages),
+      scheduleMode: scheduleMode,
     );
 
     // Schedule night notification
@@ -153,11 +190,8 @@ class NotificationService {
       minute: 0,
       title: 'Good Night! 🌙',
       body: _getRandomMessage(_nightMessages),
+      scheduleMode: scheduleMode,
     );
-
-    if (kDebugMode) {
-      print('✅ Scheduled 3 daily notifications');
-    }
   }
 
   static Future<void> _scheduleNotification({
@@ -166,6 +200,7 @@ class NotificationService {
     required int minute,
     required String title,
     required String body,
+    required AndroidScheduleMode scheduleMode,
   }) async {
     final now = tz.TZDateTime.now(tz.local);
     var scheduledDate = tz.TZDateTime(
@@ -202,15 +237,11 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: scheduleMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
-
-    if (kDebugMode) {
-      print('📅 Scheduled notification #$id for ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
-    }
   }
 
   static String _getRandomMessage(List<String> messages) {
@@ -220,35 +251,5 @@ class NotificationService {
 
   static Future<void> cancelAllNotifications() async {
     await _notifications.cancelAll();
-    if (kDebugMode) {
-      print('🔕 Cancelled all notifications');
-    }
-  }
-
-  static Future<void> showTestNotification() async {
-    if (kDebugMode) {
-      print('🔔 Showing test notification...');
-    }
-
-    await _notifications.show(
-      999,
-      'Test Notification 🧪',
-      'If you see this, notifications are working!',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'test_channel',
-          'Test Notifications',
-          channelDescription: 'Test notifications',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-    );
   }
 }

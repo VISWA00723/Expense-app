@@ -259,12 +259,15 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                     16,
                     MediaQuery.of(context).viewInsets.bottom + 16,
                   ),
+                  cacheExtent: 500, // Pre-render items for smooth scrolling
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final expense = filtered[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
+                    return RepaintBoundary(
+                      key: ValueKey(expense.id), // Stable key for performance
+                      child: Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
                         title: Text(expense.title),
                         subtitle: Text(expense.date),
                         trailing: SizedBox(
@@ -334,9 +337,10 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                               ),
                             ],
                           ),
+                          ),
                         ),
                       ),
-                    );
+                    ); // Close RepaintBoundary
                   },
                 );
               },

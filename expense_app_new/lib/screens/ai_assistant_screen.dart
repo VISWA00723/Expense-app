@@ -8,6 +8,7 @@ import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/models/expense_model.dart';
 import 'package:expense_app_new/database/database.dart';
 import 'package:expense_app_new/theme/app_theme.dart';
+import 'package:expense_app_new/services/api_service.dart' as api;
 import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -77,7 +78,7 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     ));
 
     try {
-      // Get context (expenses)
+      // Get context (expenses and categories)
       final expenses = await db.getRecentExpenses(user!.id, 300);
       final expenseModels = expenses.map((e) => ExpenseModel(
         id: e.id,
@@ -89,11 +90,74 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
         createdAt: e.createdAt,
       )).toList();
 
-      // Call AI
-      final response = await ref.read(apiServiceProvider).analyzeExpenses(
-        question: text,
-        expenses: expenseModels,
-      );
+      // Check if user wants to add an expense
+      final lowerText = text.toLowerCase();
+      final isAddIntent = lowerText.contains('add expense') ||
+          lowerText.contains('add expens') ||
+          (lowerText.contains('add') && RegExp(r'\d+').hasMatch(text));
+
+      api.AIResponse response;
+      
+      if (isAddIntent) {
+        // Get categories for AI to choose from
+        final categoriesAsync = await ref.read(userCategoriesProvider(user.id).future);
+        final categories = categoriesAsync;
+        
+        if (categories.isEmpty) {
+          throw Exception('No categories available');
+        }
+        
+        final categoryNames = categories.map((c) => c.name).toList();
+        
+        // Call add-expense endpoint
+        response = await ref.read(apiServiceProvider).addExpenseWithAI(
+          naturalLanguageInput: text,
+          recentExpenses: expenseModels,
+          availableCategories: categoryNames,
+        );
+        
+        // If AI returned expense data, create the expense
+        if (response.expenseData != null) {
+          final expenseData = response.expenseData!;
+          
+          // Find matching category
+          final category = categories.firstWhere(
+            (c) => c.name.toLowerCase() == expenseData.category.toLowerCase(),
+            orElse: () => categories.first,
+          );
+          
+          // Create expense in database
+          await db.into(db.expenses).insert(ExpensesCompanion(
+            userId: drift.Value(user.id),
+            title: drift.Value(expenseData.title),
+            amount: drift.Value(expenseData.amount),
+            categoryId: drift.Value(category.id),
+            date: drift.Value(expenseData.date), // Use date from AI
+            notes: drift.Value(expenseData.notes),
+            createdAt: drift.Value(DateTime.now().toIso8601String()),
+          ));
+          
+          // Add success confirmation
+          await db.addChatMessage(AiChatMessagesCompanion(
+            sessionId: drift.Value(_currentSessionId!),
+            isUser: const drift.Value(false),
+            content: drift.Value('✅ Expense added successfully!\n\n${response.answer}'),
+            createdAt: drift.Value(DateTime.now().toIso8601String()),
+          ));
+          
+          setState(() => _isLoading = false);
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          }
+          return; // Exit early, we've handled the message
+        }
+      } else {
+        // Regular analysis
+        response = await ref.read(apiServiceProvider).analyzeExpenses(
+          question: text,
+          expenses: expenseModels,
+        );
+      }
 
       // Save AI response
       await db.addChatMessage(AiChatMessagesCompanion(
