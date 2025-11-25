@@ -41,6 +41,9 @@ android/gradlew
 android/gradlew.bat
 android/settings.gradle
 
+# Firebase - Keep configuration files private
+**/google-services.json
+
 # Backend
 backend/node_modules/
 backend/.env
