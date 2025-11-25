@@ -42,15 +42,11 @@ class NotificationService {
   static Future<void> initialize() async {
     if (_initialized) return;
 
-    if (kDebugMode) {
-      print('🔔 Initializing Notification Service...');
-    }
-
     // Initialize timezone
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
 
-    // Android initialization
+    // Android initialization with notification channel
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     
     // iOS initialization
@@ -70,33 +66,36 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
-    _initialized = true;
-    
-    if (kDebugMode) {
-      print('✅ Notification Service initialized');
-    }
-  }
-
-  static void _onNotificationTapped(NotificationResponse response) {
-    if (kDebugMode) {
-      print('🔔 Notification tapped: ${response.payload}');
-    }
-    // App is already open, just log the tap
-  }
-
-  static Future<bool> requestPermission() async {
-    if (kDebugMode) {
-      print('🔔 Requesting notification permission...');
-    }
+    // Create notification channel for Android
+    const androidChannel = AndroidNotificationChannel(
+      'daily_reminders',
+      'Daily Reminders',
+      description: 'Daily expense tracking reminders',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
 
     final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     
     if (androidPlugin != null) {
+      await androidPlugin.createNotificationChannel(androidChannel);
+    }
+
+    _initialized = true;
+  }
+
+  static void _onNotificationTapped(NotificationResponse response) {
+    // App is already open, just log the tap
+  }
+
+  static Future<bool> requestPermission() async {
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
       final granted = await androidPlugin.requestNotificationsPermission();
-      if (kDebugMode) {
-        print((granted ?? false) ? '✅ Permission granted' : '❌ Permission denied');
-      }
       return granted ?? false;
     }
 
@@ -122,8 +121,16 @@ class NotificationService {
   static Future<void> scheduleDailyNotifications() async {
     if (!await isEnabled()) return;
 
-    if (kDebugMode) {
-      print('🔔 Scheduling daily notifications...');
+    // Check if we have exact alarm permission (Android 12+)
+    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
+      final canSchedule = await androidPlugin.canScheduleExactNotifications();
+      
+      if (canSchedule == false) {
+        await androidPlugin.requestExactAlarmsPermission();
+      }
     }
 
     await cancelAllNotifications();
@@ -154,10 +161,6 @@ class NotificationService {
       title: 'Good Night! 🌙',
       body: _getRandomMessage(_nightMessages),
     );
-
-    if (kDebugMode) {
-      print('✅ Scheduled 3 daily notifications');
-    }
   }
 
   static Future<void> _scheduleNotification({
@@ -207,10 +210,6 @@ class NotificationService {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
-
-    if (kDebugMode) {
-      print('📅 Scheduled notification #$id for ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}');
-    }
   }
 
   static String _getRandomMessage(List<String> messages) {
@@ -220,35 +219,5 @@ class NotificationService {
 
   static Future<void> cancelAllNotifications() async {
     await _notifications.cancelAll();
-    if (kDebugMode) {
-      print('🔕 Cancelled all notifications');
-    }
-  }
-
-  static Future<void> showTestNotification() async {
-    if (kDebugMode) {
-      print('🔔 Showing test notification...');
-    }
-
-    await _notifications.show(
-      999,
-      'Test Notification 🧪',
-      'If you see this, notifications are working!',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'test_channel',
-          'Test Notifications',
-          channelDescription: 'Test notifications',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-    );
   }
 }

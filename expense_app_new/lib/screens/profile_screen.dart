@@ -438,21 +438,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await NotificationService.showTestNotification();
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Test notification sent!')),
-                            );
-                          },
-                          icon: const Icon(Icons.notifications),
-                          label: const Text('Test Notification'),
-                        ),
-                      ),
                     ],
                   ],
                 );
