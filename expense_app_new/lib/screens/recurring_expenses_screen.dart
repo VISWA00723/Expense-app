@@ -12,7 +12,11 @@ class RecurringExpensesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    if (user == null) return const Center(child: CircularProgressIndicator());
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     final recurringService = ref.watch(recurringExpenseServiceProvider);
     final recurringExpensesAsync = ref.watch(userRecurringExpensesProvider(user.id));
@@ -44,6 +48,15 @@ class RecurringExpensesScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final expense = expenses[index];
               final color = ColorService.getColorById(expense.categoryId);
+              
+              // Format date
+              String formattedDate = expense.nextDueDate;
+              try {
+                final date = DateTime.parse(expense.nextDueDate);
+                formattedDate = DateFormat('dd MMM yyyy').format(date);
+              } catch (e) {
+                // Keep original string if parsing fails
+              }
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -56,7 +69,7 @@ class RecurringExpensesScreen extends ConsumerWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${expense.frequency.toUpperCase()} • Next: ${expense.nextDueDate}'),
+                      Text('${expense.frequency.toUpperCase()} • Next: $formattedDate'),
                       if (expense.autoPay)
                         Row(
                           children: [
@@ -71,7 +84,7 @@ class RecurringExpensesScreen extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '₹${expense.amount.toStringAsFixed(0)}',
+                        '₹${expense.amount.toStringAsFixed(2)}',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       IconButton(

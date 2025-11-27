@@ -32,22 +32,25 @@ class RecurringExpenseService {
       
       // If due date is today or in the past
       if (dueDate.isBefore(now) || recurring.nextDueDate == todayStr) {
-        // Create expense
-        await db.into(db.expenses).insert(ExpensesCompanion(
-          userId: Value(userId),
-          title: Value(recurring.name),
-          amount: Value(recurring.amount),
-          categoryId: Value(recurring.categoryId),
-          date: Value(recurring.nextDueDate),
-          notes: const Value('Auto-generated from recurring expense'),
-          createdAt: Value(DateTime.now().toIso8601String()),
-        ));
+        // Wrap in transaction to ensure atomicity
+        await db.transaction(() async {
+          // Create expense
+          await db.into(db.expenses).insert(ExpensesCompanion(
+            userId: Value(userId),
+            title: Value(recurring.name),
+            amount: Value(recurring.amount),
+            categoryId: Value(recurring.categoryId),
+            date: Value(recurring.nextDueDate),
+            notes: const Value('Auto-generated from recurring expense'),
+            createdAt: Value(DateTime.now().toIso8601String()),
+          ));
 
-        // Update next due date
-        final nextDate = _calculateNextDueDate(dueDate, recurring.frequency);
-        await db.update(db.recurringExpenses).replace(recurring.copyWith(
-          nextDueDate: DateFormat('yyyy-MM-dd').format(nextDate),
-        ));
+          // Update next due date
+          final nextDate = _calculateNextDueDate(dueDate, recurring.frequency);
+          await db.update(db.recurringExpenses).replace(recurring.copyWith(
+            nextDueDate: DateFormat('yyyy-MM-dd').format(nextDate),
+          ));
+        });
       }
     }
   }

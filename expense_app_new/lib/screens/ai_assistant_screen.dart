@@ -266,7 +266,7 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         context.go('/dashboard');
       },

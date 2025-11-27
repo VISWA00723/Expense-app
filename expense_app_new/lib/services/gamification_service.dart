@@ -255,7 +255,7 @@ class GamificationService {
   Future<void> checkExpenseAchievements(int userId) async {
     print('🏆 [Gamification] Checking expense achievements');
     // Check 'first_expense'
-    final expenseCount = await (db.select(db.expenses)..where((t) => t.userId.equals(userId))).get().then((l) => l.length);
+    final expenseCount = await db.getExpenseCount(userId);
     
     if (expenseCount >= 1) {
       final achievement = await (db.select(db.achievements)..where((t) => t.id.equals('first_expense'))).getSingleOrNull();

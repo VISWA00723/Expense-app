@@ -9,38 +9,44 @@ import 'package:intl/intl.dart';
 import 'package:expense_app_new/database/database.dart';
 
 class ExportService {
-  Future<void> exportToCsv(List<Expense> expenses) async {
-    final List<List<dynamic>> rows = [];
-    
-    // Header
-    rows.add([
-      'Date',
-      'Title',
-      'Amount',
-      'Category',
-      'Description',
-      'Payment Method',
-    ]);
-
-    // Data
-    for (final expense in expenses) {
+  Future<bool> exportToCsv(List<Expense> expenses) async {
+    try {
+      final List<List<dynamic>> rows = [];
+      
+      // Header
       rows.add([
-        expense.date,
-        expense.title,
-        expense.amount,
-        expense.categoryId, // Ideally map to name, but ID is simpler for now
-        expense.notes ?? '',
-        'Cash', // Default to Cash as paymentMethod is not in DB
+        'Date',
+        'Title',
+        'Amount',
+        'Category',
+        'Description',
+        'Payment Method',
       ]);
+
+      // Data
+      for (final expense in expenses) {
+        rows.add([
+          expense.date,
+          expense.title,
+          expense.amount,
+          expense.categoryId, // Ideally map to name, but ID is simpler for now
+          expense.notes ?? '',
+          'Cash', // Default to Cash as paymentMethod is not in DB
+        ]);
+      }
+
+      final csvData = const ListToCsvConverter().convert(rows);
+      final directory = await getTemporaryDirectory();
+      final path = '${directory.path}/expenses_export_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv';
+      final file = File(path);
+      await file.writeAsString(csvData);
+
+      await Share.shareXFiles([XFile(path)], text: 'My Expenses CSV Export');
+      return true;
+    } catch (e) {
+      print('Error exporting CSV: $e');
+      return false;
     }
-
-    final csvData = const ListToCsvConverter().convert(rows);
-    final directory = await getTemporaryDirectory();
-    final path = '${directory.path}/expenses_export_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv';
-    final file = File(path);
-    await file.writeAsString(csvData);
-
-    await Share.shareXFiles([XFile(path)], text: 'My Expenses CSV Export');
   }
 
   Future<void> exportToPdf(List<Expense> expenses, User user) async {

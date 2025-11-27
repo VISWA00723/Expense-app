@@ -246,6 +246,14 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> deleteExpense(int id) =>
       (delete(expenses)..where((tbl) => tbl.id.equals(id))).go();
+
+  Future<int> getExpenseCount(int userId) {
+    final count = expenses.id.count();
+    final query = selectOnly(expenses)
+      ..addColumns([count])
+      ..where(expenses.userId.equals(userId));
+    return query.map((row) => row.read(count) ?? 0).getSingle();
+  }
   
   Future<double> getTotalByMonth(int userId, String month) async {
     final result = await customSelect(

@@ -11,17 +11,18 @@
 
     <!-- 📸 REQUIRED for Receipt Scanning -->
     <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <!-- Storage: READ_MEDIA_IMAGES is for API 33+ image access. Legacy permissions removed. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
 
     <!-- 🎙️ REQUIRED for Voice Automation -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <!-- 📱 REQUIRED for SMS Parsing -->
+    <!-- NOTE: You must declare the restricted permission category and provide justification in Play Console before publishing. -->
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
-    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    
+    <!-- Biometric permission is automatically added by local_auth plugin -->
 
     <application
         android:label="WalletWise"

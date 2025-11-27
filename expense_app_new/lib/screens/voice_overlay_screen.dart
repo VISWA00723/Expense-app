@@ -88,6 +88,21 @@ class _VoiceOverlayScreenState extends ConsumerState<VoiceOverlayScreen> with Si
 
     try {
       final user = ref.read(currentUserProvider);
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+             _status = 'Error: User not found';
+             _isProcessing = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please login to use voice features')),
+          );
+          Future.delayed(const Duration(seconds: 2), () {
+             if (mounted) context.pop();
+          });
+        }
+        return;
+      }
       final db = ref.read(databaseProvider);
       
       // Get context

@@ -7,6 +7,7 @@ import 'package:expense_app_new/services/analytics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:expense_app_new/services/biometric_service.dart';
+import 'package:expense_app_new/database/database.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -50,29 +51,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _completeLogin(User user, String loginMethod) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Save email for biometric login
+    await prefs.setString('last_email', user.email);
+
+    // Update global state
+    ref.read(currentUserProvider.notifier).state = user;
+    
+    // Log analytics
+    await AnalyticsService.logLogin(loginMethod);
+    
+    if (!mounted) return;
+
+    // Check if user has seen onboarding
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+    if (!hasSeenOnboarding) {
+      context.go('/onboarding');
+    } else {
+      context.go('/dashboard');
+    }
+  }
+
   Future<void> _handleBiometricLogin() async {
     final authenticated = await ref.read(biometricServiceProvider).authenticate();
     if (authenticated) {
-      // For real implementation, we'd need to securely store/retrieve credentials
-      // For now, we'll assume if biometric passes, we check if there's a last logged in user
-      // or simply rely on the fact that biometric auth succeeded for the device owner.
-      // However, to be secure, we should really be unlocking an encrypted token.
-      
-      // Simplified flow: Check if we have a saved user ID or email to auto-login
       final prefs = await SharedPreferences.getInstance();
       final savedEmail = prefs.getString('last_email');
       
       if (savedEmail != null && savedEmail.isNotEmpty) {
         setState(() => _isLoading = true);
         final authService = ref.read(authServiceProvider);
-        // We're bypassing password here assuming biometric is strong enough for this local-first app
-        // In a real backend app, we'd use a refresh token or similar.
         final user = await authService.getUserByEmail(savedEmail);
         
         if (user != null) {
-          ref.read(currentUserProvider.notifier).state = user;
-          await AnalyticsService.logLogin('biometric');
-          if (mounted) context.go('/dashboard');
+          await _completeLogin(user, 'biometric');
         } else {
           setState(() => _isLoading = false);
           if (mounted) {
@@ -109,24 +124,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (!mounted) return;
 
-    if (success) {
-      // Save email for biometric login
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_email', _emailController.text);
-
-      ref.read(currentUserProvider.notifier).state = authService.currentUser;
-      await AnalyticsService.logLogin('email');
-      
-      if (!mounted) return;
-
-      // Check if user has seen onboarding
-      final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
-
-      if (!hasSeenOnboarding) {
-        context.go('/onboarding');
-      } else {
-        context.go('/dashboard');
-      }
+    if (success && authService.currentUser != null) {
+      await _completeLogin(authService.currentUser!, 'email');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid email or password')),

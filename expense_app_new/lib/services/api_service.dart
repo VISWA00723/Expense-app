@@ -122,18 +122,40 @@ class ApiService {
         double calculatedTotal = 0;
         List<String> lineItems = [];
         
-        if (structuredData['items'] != null) {
+        if (structuredData['items'] is List) {
           for (var item in structuredData['items']) {
-            final name = item['name'] ?? 'Item';
-            final qty = (item['quantity'] ?? 1).toDouble();
-            final price = (item['unit_price'] ?? 0).toDouble();
-            final explicitTotal = (item['total_price'] ?? 0).toDouble();
+            // Verify item is a Map
+            if (item is! Map) {
+              print('⚠️ [AI] Skipping invalid item (not a Map): $item');
+              continue;
+            }
+
+            final name = item['name']?.toString() ?? 'Item';
+            
+            // Helper to safely parse doubles from various types
+            double safeDouble(dynamic value, [double defaultValue = 0.0]) {
+              if (value == null) return defaultValue;
+              if (value is num) return value.toDouble();
+              if (value is String) {
+                // Remove currency symbols and commas
+                final clean = value.replaceAll(RegExp(r'[^\d.-]'), '');
+                return double.tryParse(clean) ?? defaultValue;
+              }
+              return defaultValue;
+            }
+
+            final qty = safeDouble(item['quantity'], 1.0);
+            final price = safeDouble(item['unit_price']);
+            final explicitTotal = safeDouble(item['total_price']);
             
             // Use explicit total if available, otherwise calculate
             final total = explicitTotal > 0 ? explicitTotal : (qty * price);
             
-            calculatedTotal += total;
-            lineItems.add('$name: ${total.toStringAsFixed(2)}');
+            // Only add positive totals
+            if (total > 0) {
+              calculatedTotal += total;
+              lineItems.add('$name: ${total.toStringAsFixed(2)}');
+            }
           }
         }
         

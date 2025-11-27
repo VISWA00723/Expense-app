@@ -144,7 +144,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         context.go('/dashboard');
       },
