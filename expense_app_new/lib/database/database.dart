@@ -78,7 +78,7 @@ class UserStats extends Table {
   IntColumn get wellnessScore => integer().withDefault(const Constant(50))();
   IntColumn get currentStreak => integer().withDefault(const Constant(0))();
   IntColumn get longestStreak => integer().withDefault(const Constant(0))();
-  TextColumn get lastLoginDate => text()(); // ISO format: yyyy-mm-dd
+  TextColumn get lastLoginDate => text().clientDefault(() => DateTime.now().toIso8601String().split('T')[0])(); // ISO format: yyyy-mm-dd
   IntColumn get totalPoints => integer().withDefault(const Constant(0))();
 }
 

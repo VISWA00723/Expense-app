@@ -153,7 +153,13 @@ class GamificationService {
     }
 
     final lastLogin = DateTime.parse(stats.lastLoginDate);
-    final difference = DateTime.now().difference(lastLogin).inDays;
+    final now = DateTime.now();
+    
+    // Normalize to date only (midnight)
+    final lastLoginDate = DateTime(lastLogin.year, lastLogin.month, lastLogin.day);
+    final nowDate = DateTime(now.year, now.month, now.day);
+    
+    final difference = nowDate.difference(lastLoginDate).inDays;
 
     if (difference == 1) {
       // Consecutive day

@@ -34,22 +34,34 @@ class RecurringExpenseService {
       if (dueDate.isBefore(now) || recurring.nextDueDate == todayStr) {
         // Wrap in transaction to ensure atomicity
         await db.transaction(() async {
-          // Create expense
-          await db.into(db.expenses).insert(ExpensesCompanion(
-            userId: Value(userId),
-            title: Value(recurring.name),
-            amount: Value(recurring.amount),
-            categoryId: Value(recurring.categoryId),
-            date: Value(recurring.nextDueDate),
-            notes: const Value('Auto-generated from recurring expense'),
-            createdAt: Value(DateTime.now().toIso8601String()),
-          ));
+          // Check if expense already exists for today to prevent duplicates
+          final existing = await (db.select(db.expenses)
+            ..where((t) => 
+              t.userId.equals(userId) & 
+              t.title.equals(recurring.name) & 
+              t.amount.equals(recurring.amount) & 
+              t.date.equals(recurring.nextDueDate)
+            ))
+            .getSingleOrNull();
 
-          // Update next due date
-          final nextDate = _calculateNextDueDate(dueDate, recurring.frequency);
-          await db.update(db.recurringExpenses).replace(recurring.copyWith(
-            nextDueDate: DateFormat('yyyy-MM-dd').format(nextDate),
-          ));
+          if (existing == null) {
+            // Create expense
+            await db.into(db.expenses).insert(ExpensesCompanion(
+              userId: Value(userId),
+              title: Value(recurring.name),
+              amount: Value(recurring.amount),
+              categoryId: Value(recurring.categoryId),
+              date: Value(recurring.nextDueDate),
+              notes: const Value('Auto-generated from recurring expense'),
+              createdAt: Value(DateTime.now().toIso8601String()),
+            ));
+
+            // Update next due date
+            final nextDate = _calculateNextDueDate(dueDate, recurring.frequency);
+            await db.update(db.recurringExpenses).replace(recurring.copyWith(
+              nextDueDate: DateFormat('yyyy-MM-dd').format(nextDate),
+            ));
+          }
         });
       }
     }
@@ -60,8 +72,24 @@ class RecurringExpenseService {
     switch (frequency) {
       case 'daily': return current.add(const Duration(days: 1));
       case 'weekly': return current.add(const Duration(days: 7));
-      case 'monthly': return DateTime(current.year, current.month + 1, current.day);
-      case 'yearly': return DateTime(current.year + 1, current.month, current.day);
+      case 'monthly': 
+        int year = current.year;
+        int month = current.month + 1;
+        if (month > 12) {
+          year++;
+          month = 1;
+        }
+        final lastDayOfMonth = DateTime(year, month + 1, 0).day;
+        final day = current.day > lastDayOfMonth ? lastDayOfMonth : current.day;
+        return DateTime(year, month, day);
+      case 'yearly': 
+        int year = current.year + 1;
+        int month = current.month;
+        int day = current.day;
+        if (month == 2 && day == 29 && !((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) {
+          day = 28;
+        }
+        return DateTime(year, month, day);
       default: return current.add(const Duration(days: 30));
     }
   }

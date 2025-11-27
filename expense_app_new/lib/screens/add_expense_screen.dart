@@ -153,11 +153,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         if (receiptData.date != null) {
           _selectedDate = receiptData.date!;
         }
-        
+      });
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Receipt scanned successfully!')),
         );
-      });
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -260,8 +262,29 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           switch (_recurringFrequency) {
             case 'daily': nextDate = nextDate.add(const Duration(days: 1)); break;
             case 'weekly': nextDate = nextDate.add(const Duration(days: 7)); break;
-            case 'monthly': nextDate = DateTime(nextDate.year, nextDate.month + 1, nextDate.day); break;
-            case 'yearly': nextDate = DateTime(nextDate.year + 1, nextDate.month, nextDate.day); break;
+            case 'monthly': 
+              // Robust month addition handling end-of-month overflow
+              int year = nextDate.year;
+              int month = nextDate.month + 1;
+              if (month > 12) {
+                year++;
+                month = 1;
+              }
+              // Get last day of the target month
+              final lastDayOfMonth = DateTime(year, month + 1, 0).day;
+              final day = nextDate.day > lastDayOfMonth ? lastDayOfMonth : nextDate.day;
+              nextDate = DateTime(year, month, day);
+              break;
+            case 'yearly': 
+              // Robust year addition handling leap years (Feb 29 -> Feb 28)
+              int year = nextDate.year + 1;
+              int month = nextDate.month;
+              int day = nextDate.day;
+              if (month == 2 && day == 29 && !((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) {
+                day = 28;
+              }
+              nextDate = DateTime(year, month, day);
+              break;
           }
 
           await recurringService.addRecurringExpense(
