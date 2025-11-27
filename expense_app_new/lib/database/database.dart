@@ -15,6 +15,7 @@ class Users extends Table {
   RealColumn get monthlySalary => real()();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
+  TextColumn get preferredCurrency => text().withDefault(const Constant('INR'))();
 }
 
 class Incomes extends Table {
@@ -44,6 +45,7 @@ class Expenses extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get date => text()(); // ISO format: yyyy-mm-dd
   TextColumn get createdAt => text()();
+  TextColumn get currencyCode => text().withDefault(const Constant('INR'))();
 }
 
 class Budgets extends Table {
@@ -70,12 +72,54 @@ class AiChatMessages extends Table {
   TextColumn get createdAt => text()();
 }
 
-@DriftDatabase(tables: [Users, Incomes, ExpenseCategories, Expenses, Budgets, AiChatSessions, AiChatMessages])
+class UserStats extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  IntColumn get wellnessScore => integer().withDefault(const Constant(50))();
+  IntColumn get currentStreak => integer().withDefault(const Constant(0))();
+  IntColumn get longestStreak => integer().withDefault(const Constant(0))();
+  TextColumn get lastLoginDate => text()(); // ISO format: yyyy-mm-dd
+  IntColumn get totalPoints => integer().withDefault(const Constant(0))();
+}
+
+class Achievements extends Table {
+  TextColumn get id => text()(); // String ID like 'first_expense'
+  TextColumn get title => text()();
+  TextColumn get description => text()();
+  TextColumn get iconName => text()();
+  IntColumn get points => integer()();
+  TextColumn get conditionType => text()(); // 'streak', 'budget', 'savings'
+  IntColumn get conditionValue => integer()();
+  
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class UserAchievements extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  TextColumn get achievementId => text().references(Achievements, #id)();
+  TextColumn get unlockedAt => text()();
+}
+
+class RecurringExpenses extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  TextColumn get name => text()();
+  RealColumn get amount => real()();
+  IntColumn get categoryId => integer().references(ExpenseCategories, #id)();
+  TextColumn get frequency => text()(); // 'daily', 'weekly', 'monthly', 'yearly'
+  TextColumn get nextDueDate => text()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  BoolColumn get autoPay => boolean().withDefault(const Constant(false))();
+}
+
+@DriftDatabase(tables: [Users, Incomes, ExpenseCategories, Expenses, Budgets, AiChatSessions, AiChatMessages, UserStats, Achievements, UserAchievements, RecurringExpenses])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -100,6 +144,20 @@ class AppDatabase extends _$AppDatabase {
           await m.create(budgets);
           await m.create(aiChatSessions);
           await m.create(aiChatMessages);
+        }
+
+        // Migration from v3 to v4: Add Gamification and Recurring Expenses tables
+        if (from < 4) {
+          await m.create(userStats);
+          await m.create(achievements);
+          await m.create(userAchievements);
+          await m.create(recurringExpenses);
+        }
+
+        // Migration from v4 to v5: Add Currency support
+        if (from < 5) {
+          await m.addColumn(expenses, expenses.currencyCode);
+          await m.addColumn(users, users.preferredCurrency);
         }
       },
     );

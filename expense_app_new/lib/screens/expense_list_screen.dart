@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:expense_app_new/providers/database_provider.dart';
 import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/database/database.dart';
+import 'package:expense_app_new/widgets/app_bottom_bar.dart';
 
 class ExpenseListScreen extends ConsumerStatefulWidget {
   const ExpenseListScreen({Key? key}) : super(key: key);
@@ -141,7 +142,13 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
     final userExpenses = ref.watch(userExpensesProvider(userId));
     final categories = ref.watch(userCategoriesProvider(userId));
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        context.go('/dashboard');
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('All Expenses'),
         elevation: 0,
@@ -350,54 +357,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle),
-            label: 'Add',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.list),
-            label: 'Expenses',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.smart_toy),
-            label: 'AI',
-          ),
-        ],
-        currentIndex: 2,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        selectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 12,
-        ),
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              context.go('/dashboard');
-              break;
-            case 1:
-              context.go('/add');
-              break;
-            case 2:
-              context.go('/list');
-              break;
-            case 3:
-              context.go('/ai');
-              break;
-          }
-        },
+      bottomNavigationBar: const AppBottomBar(currentIndex: 2),
       ),
     );
   }

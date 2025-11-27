@@ -6,6 +6,9 @@ import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/services/auth_service.dart';
 import 'package:expense_app_new/providers/theme_provider.dart';
 import 'package:expense_app_new/services/notification_service.dart';
+import 'package:expense_app_new/services/export_service.dart';
+import 'package:expense_app_new/services/biometric_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -22,6 +25,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _confirmPasswordController;
   bool _isLoading = false;
   bool _showPasswordFields = false;
+  final _exportService = ExportService();
 
   @override
   void initState() {
@@ -165,6 +169,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _exportCsv() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = ref.read(currentUserProvider);
+      if (user == null) return;
+
+      final db = ref.read(databaseProvider);
+      final expenses = await db.getUserExpenses(user.id);
+      await _exportService.exportToCsv(expenses);
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('CSV Export ready to share')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = ref.read(currentUserProvider);
+      if (user == null) return;
+      
+      final db = ref.read(databaseProvider);
+      final expenses = await db.getUserExpenses(user.id);
+      await _exportService.exportToPdf(expenses, user);
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF Report ready to share')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
@@ -283,7 +333,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 32),
 
-            // Salary Section
+            // Financial Information Section
             Text(
               'Financial Information',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -306,6 +356,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Subscriptions & Recurring Button
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.autorenew),
+                title: const Text('Subscriptions & Recurring'),
+                subtitle: const Text('Manage your recurring expenses'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/recurring-expenses'),
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Update Profile Button
             SizedBox(
               width: double.infinity,
@@ -320,6 +382,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       )
                     : const Text('Update Profile'),
               ),
+            ),
+            const SizedBox(height: 32),
+
+            // Data Export Section
+            Text(
+              'Data Export',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _exportCsv,
+                    icon: const Icon(Icons.table_chart_outlined),
+                    label: const Text('CSV'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _exportPdf,
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('PDF'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 32),
 
@@ -476,6 +567,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
+            ),
+            const SizedBox(height: 16),
+
+            // Biometric Toggle
+            FutureBuilder<bool>(
+              future: SharedPreferences.getInstance().then((prefs) => prefs.getBool('biometric_enabled') ?? false),
+              builder: (context, snapshot) {
+                final isEnabled = snapshot.data ?? false;
+                
+                return Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.fingerprint),
+                    title: const Text('Biometric Login'),
+                    subtitle: const Text('Use fingerprint or face to login'),
+                    value: isEnabled,
+                    onChanged: (value) async {
+                      final biometricService = ref.read(biometricServiceProvider);
+                      final isSupported = await biometricService.isDeviceSupported();
+                      
+                      if (!isSupported) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Biometrics not supported on this device')),
+                        );
+                        return;
+                      }
+
+                      if (value) {
+                        // Verify identity before enabling
+                        final authenticated = await biometricService.authenticate();
+                        if (!authenticated) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Authentication failed')),
+                          );
+                          return;
+                        }
+                      }
+
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('biometric_enabled', value);
+                      setState(() {});
+                      
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(value ? 'Biometric login enabled' : 'Biometric login disabled')),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
 
