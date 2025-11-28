@@ -139,10 +139,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       final imageFile = await _pickReceiptImage();
       if (imageFile == null) return;
 
+      if (!mounted) return;
       setState(() => _isLoading = true);
       
       final receiptData = await _receiptScanningService.scanReceipt(imageFile);
       
+      if (!mounted) return;
       setState(() {
         if (receiptData.merchant != null) {
           _titleController.text = receiptData.merchant!;
@@ -177,6 +179,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       final imageFile = await _pickReceiptImage();
       if (imageFile == null) return;
 
+      if (!mounted) return;
       setState(() => _isLoading = true);
       
       // Stage 1: Get raw text and clean it
@@ -207,6 +210,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
     );
+    if (!mounted) return;
     if (picked != null && picked != _selectedDate) {
       setState(() => _selectedDate = picked);
     }
