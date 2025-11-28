@@ -2,7 +2,7 @@ name: expense_app_new
 description: "A Flutter expense tracking app with AI assistant powered by OpenAI."
 publish_to: 'none'
 
-version: 3.0.1+1
+version: 4.0.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -30,7 +30,7 @@ dependencies:
 
   # UI & charts
   fl_chart: ^0.65.0
-  intl: ^0.19.0
+  intl: ^0.18.1
 
   # Permissions & Media
   image_picker: ^1.0.7
@@ -43,6 +43,7 @@ dependencies:
   url_launcher: ^6.2.4
 
   # PDF Generation & Printing
+  # PDF Generation & Printing
   pdf: ^3.10.0
   printing: ^5.11.0
 
@@ -54,9 +55,21 @@ dependencies:
   firebase_analytics: ^11.0.0
 
   # Notifications
-  flutter_local_notifications: ^17.0.0
-  timezone: ^0.9.0
-  flutter_timezone: ^3.0.0
+  flutter_local_notifications: ^17.2.2
+  timezone: ^0.9.2
+  flutter_timezone: ^3.0.1
+
+  # OCR & Export
+  google_mlkit_text_recognition: ^0.13.0
+  csv: ^6.0.0
+  share_plus: ^10.0.0
+  speech_to_text: ^7.3.0
+  quick_actions: ^1.1.0
+  
+  # Biometrics
+  local_auth: ^2.2.0
+  local_auth_android: ^1.0.38
+  local_auth_ios: ^1.1.6
 
 dev_dependencies:
   flutter_test:

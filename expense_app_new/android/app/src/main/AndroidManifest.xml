@@ -9,6 +9,16 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 
+    <!-- 📸 REQUIRED for Receipt Scanning -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Storage: READ_MEDIA_IMAGES is for API 33+ image access. Legacy permissions removed. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+
+    <!-- 🎙️ REQUIRED for Voice Automation -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    
+    <!-- Biometric permission is automatically added by local_auth plugin -->
+
     <application
         android:label="WalletWise"
         android:name="${applicationName}"

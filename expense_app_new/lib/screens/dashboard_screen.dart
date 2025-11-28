@@ -10,6 +10,8 @@ import 'package:expense_app_new/services/color_service.dart';
 import 'package:expense_app_new/theme/app_theme.dart';
 import 'package:expense_app_new/services/analytics_service.dart';
 import 'package:expense_app_new/widgets/notification_permission_dialog.dart';
+import 'package:expense_app_new/services/gamification_service.dart';
+import 'package:expense_app_new/widgets/app_bottom_bar.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -107,6 +109,10 @@ class DashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
 
+            // Wellness Score
+            _WellnessScoreCard(userId: user.id),
+            const SizedBox(height: 24),
+
             // Salary Overview Card
             _SalaryOverviewCard(user: user),
             const SizedBox(height: 32),
@@ -120,53 +126,7 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            activeIcon: Icon(Icons.add_circle),
-            label: 'Add',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.list_alt),
-            activeIcon: Icon(Icons.list),
-            label: 'Expenses',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.smart_toy_outlined),
-            activeIcon: Icon(Icons.smart_toy),
-            label: 'AI',
-          ),
-        ],
-        currentIndex: 0,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: colorScheme.surface,
-        selectedItemColor: colorScheme.primary,
-        unselectedItemColor: colorScheme.onSurfaceVariant,
-        showUnselectedLabels: true,
-        elevation: 8,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              context.go('/dashboard');
-              break;
-            case 1:
-              context.go('/add');
-              break;
-            case 2:
-              context.go('/list');
-              break;
-            case 3:
-              context.go('/ai');
-              break;
-          }
-        },
-      ),
+      bottomNavigationBar: const AppBottomBar(currentIndex: 0),
     );
   }
 }
@@ -380,19 +340,26 @@ class _SalaryOverviewCard extends ConsumerWidget {
   }
 }
 
-class _SpendingBreakdown extends ConsumerWidget {
+class _SpendingBreakdown extends ConsumerStatefulWidget {
   final int userId;
   const _SpendingBreakdown({required this.userId});
 
-  static const _chartHeight = 300.0;
+  @override
+  ConsumerState<_SpendingBreakdown> createState() => _SpendingBreakdownState();
+}
+
+class _SpendingBreakdownState extends ConsumerState<_SpendingBreakdown> {
+  int touchedIndex = -1;
+
+  static const _chartHeight = 220.0;
   static const _maxLegendItems = 5;
-  static const _chartRadius = 100.0;
-  static const _centerSpaceRadius = 60.0;
+  static const _chartRadius = 50.0;
+  static const _centerSpaceRadius = 40.0;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final spendingByCategoryAsync = ref.watch(
-      spendingByCategoryWithIdProvider(userId),
+      spendingByCategoryWithIdProvider(widget.userId),
     );
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -457,6 +424,16 @@ class _SpendingBreakdown extends ConsumerWidget {
                 ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
               final total = sortedData.fold<double>(0, (sum, e) => sum + e.totalAmount);
 
+              // Determine what to show in the center
+              String centerLabel = 'Total';
+              String centerAmount = '₹${total.toStringAsFixed(0)}';
+              
+              if (touchedIndex != -1 && touchedIndex < sortedData.length) {
+                final item = sortedData[touchedIndex];
+                centerLabel = item.categoryName;
+                centerAmount = '₹${item.totalAmount.toStringAsFixed(0)}';
+              }
+
               return Card(
                 elevation: 0,
                 color: Colors.transparent,
@@ -472,47 +449,60 @@ class _SpendingBreakdown extends ConsumerWidget {
                           children: [
                             PieChart(
                               PieChartData(
+                                pieTouchData: PieTouchData(
+                                  touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                    setState(() {
+                                      if (!event.isInterestedForInteractions ||
+                                          pieTouchResponse == null ||
+                                          pieTouchResponse.touchedSection == null) {
+                                        touchedIndex = -1;
+                                        return;
+                                      }
+                                      touchedIndex = pieTouchResponse
+                                          .touchedSection!.touchedSectionIndex;
+                                    });
+                                  },
+                                ),
                                 sections: sortedData.asMap().entries.map((entry) {
                                   final index = entry.key;
                                   final item = entry.value;
                                   final color = ColorService.getColorById(item.categoryId);
                                   final percentage = (item.totalAmount / total * 100);
-                                  final isLarge = percentage > 10;
+                                  final isTouched = index == touchedIndex;
+                                  final radius = isTouched ? _chartRadius + 10 : _chartRadius;
                                   
                                   return PieChartSectionData(
                                     value: item.totalAmount,
                                     color: color,
-                                    radius: isLarge ? _chartRadius + 10 : _chartRadius,
-                                    title: isLarge ? '${percentage.toStringAsFixed(0)}%' : '',
-                                    titleStyle: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    badgeWidget: !isLarge && percentage > 3
-                                        ? _buildBadge(percentage, color)
+                                    radius: radius,
+                                    title: '', // Hide titles on chart to reduce clutter
+                                    badgeWidget: isTouched 
+                                        ? _buildBadge(percentage, color) 
                                         : null,
-                                    badgePositionPercentageOffset: 1.2,
+                                    badgePositionPercentageOffset: 1.3,
                                   );
                                 }).toList(),
                                 centerSpaceRadius: _centerSpaceRadius,
-                                sectionsSpace: 4,
+                                sectionsSpace: 2,
                                 startDegreeOffset: -90,
                               ),
-                              swapAnimationDuration: const Duration(milliseconds: 800),
-                              swapAnimationCurve: Curves.easeInOutCubic,
+                              swapAnimationDuration: const Duration(milliseconds: 300),
+                              swapAnimationCurve: Curves.easeInOut,
                             ),
                             Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Total',
+                                  centerLabel,
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                         color: colorScheme.onSurfaceVariant,
                                       ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  '₹${total.toStringAsFixed(0)}',
+                                  centerAmount,
                                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: colorScheme.onSurface,
@@ -536,53 +526,75 @@ class _SpendingBreakdown extends ConsumerWidget {
                         final item = sortedData[index];
                         final color = ColorService.getColorById(item.categoryId);
                         final percentage = (item.totalAmount / total * 100);
+                        final isTouched = index == touchedIndex;
                         
-                        return Row(
-                          children: [
-                            Container(
-                              width: 16,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                        return GestureDetector(
+                          onTapDown: (_) => setState(() => touchedIndex = index),
+                          onTapUp: (_) => setState(() => touchedIndex = -1),
+                          onTapCancel: () => setState(() => touchedIndex = -1),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isTouched 
+                                  ? color.withOpacity(0.1) 
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: isTouched 
+                                  ? Border.all(color: color.withOpacity(0.5)) 
+                                  : null,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                item.categoryName,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                              ),
-                            ),
-                            Text(
-                              '₹${item.totalAmount.toStringAsFixed(0)}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
                                   ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 40,
-                              child: Text(
-                                '(${percentage.toStringAsFixed(1)}%)',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    item.categoryName,
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          fontWeight: isTouched ? FontWeight.bold : FontWeight.normal,
+                                        ),
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '₹${item.totalAmount.toStringAsFixed(0)}',
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                     ),
-                                textAlign: TextAlign.end,
-                              ),
+                                    Text(
+                                      '${percentage.toStringAsFixed(1)}%',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         );
                       },
                     ),
                     if (sortedData.length > _maxLegendItems)
                       Padding(
-                        padding: const EdgeInsets.only(top: 16),
+                        padding: const EdgeInsets.only(top: 12),
                         child: TextButton(
-                          onPressed: () => context.go('/list'),
-                          child: Text('View all ${sortedData.length} categories'),
+                          onPressed: () {
+                            // Navigate to detailed report
+                            context.go('/reports');
+                          },
+                          child: const Text('View All Categories'),
                         ),
                       ),
                   ],
@@ -593,16 +605,7 @@ class _SpendingBreakdown extends ConsumerWidget {
               height: 200,
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (err, stack) => Card(
-              color: colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Error loading chart: $err',
-                  style: TextStyle(color: colorScheme.onErrorContainer),
-                ),
-              ),
-            ),
+            error: (e, s) => Text('Error: $e'),
           ),
         ],
       ),
@@ -611,24 +614,24 @@ class _SpendingBreakdown extends ConsumerWidget {
 
   Widget _buildBadge(double percentage, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
+        color: Colors.white,
+        shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.2),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Text(
         '${percentage.toStringAsFixed(0)}%',
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
+          color: color,
         ),
       ),
     );
@@ -751,6 +754,96 @@ class _RecentExpenses extends ConsumerWidget {
             error: (err, stack) => Text('Error: $err'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _WellnessScoreCard extends ConsumerWidget {
+  final int userId;
+  const _WellnessScoreCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gamificationService = ref.watch(gamificationServiceProvider);
+    final statsAsync = ref.watch(userStatsStreamProvider(userId));
+
+    return GestureDetector(
+      onTap: () => context.push('/achievements'),
+      child: statsAsync.when(
+        data: (stats) {
+          if (stats == null) return const SizedBox.shrink();
+          
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.health_and_safety, color: Colors.white),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Financial Wellness',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            '${stats.wellnessScore}',
+                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.local_fire_department, size: 16, color: Colors.orange),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${stats.currentStreak} day streak',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+          );
+        },
+        loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+        error: (e, s) => const SizedBox.shrink(),
       ),
     );
   }

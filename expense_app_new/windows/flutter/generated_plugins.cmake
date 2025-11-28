@@ -6,8 +6,11 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
   firebase_core
   flutter_timezone
+  local_auth_windows
   permission_handler_windows
   printing
+  share_plus
+  speech_to_text_windows
   sqlite3_flutter_libs
   url_launcher_windows
 )

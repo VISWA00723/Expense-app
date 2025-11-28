@@ -4,6 +4,9 @@ import 'package:expense_app_new/services/auth_service.dart';
 import 'package:expense_app_new/services/session_service.dart';
 import 'package:expense_app_new/providers/database_provider.dart';
 
+import 'package:expense_app_new/services/gamification_service.dart';
+import 'package:expense_app_new/services/recurring_expense_service.dart';
+
 final sessionServiceProvider = Provider<SessionService>((ref) {
   return SessionService();
 });
@@ -11,7 +14,12 @@ final sessionServiceProvider = Provider<SessionService>((ref) {
 final authServiceProvider = Provider<AuthService>((ref) {
   final db = ref.watch(databaseProvider);
   final sessionService = ref.watch(sessionServiceProvider);
-  return AuthService(db: db, sessionService: sessionService);
+  final gamificationService = ref.watch(gamificationServiceProvider);
+  return AuthService(
+    db: db, 
+    sessionService: sessionService,
+    gamificationService: gamificationService,
+  );
 });
 
 // Restore session on app startup
@@ -27,6 +35,15 @@ final restoreSessionProvider = FutureProvider<User?>((ref) async {
         // Update auth service with restored user
         final authService = ref.watch(authServiceProvider);
         authService.setCurrentUser(user);
+
+        // Ensure gamification is initialized
+        final gamificationService = ref.read(gamificationServiceProvider);
+        await gamificationService.ensureInitialized(user.id);
+
+        // Check for due recurring expenses
+        final recurringService = ref.read(recurringExpenseServiceProvider);
+        await recurringService.checkAndCreateDueExpenses(user.id);
+
         return user;
       }
     }
