@@ -43,6 +43,7 @@ dependencies:
   url_launcher: ^6.2.4
 
   # PDF Generation & Printing
+  # PDF Generation & Printing
   pdf: ^3.10.0
   printing: ^5.11.0
 
@@ -64,7 +65,6 @@ dependencies:
   share_plus: ^10.0.0
   speech_to_text: ^7.3.0
   quick_actions: ^1.1.0
-  flutter_sms_inbox: ^1.0.4
   
   # Biometrics
   local_auth: ^2.2.0

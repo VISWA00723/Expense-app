@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:expense_app_new/services/gamification_service.dart';
 import 'package:expense_app_new/widgets/app_bottom_bar.dart';
+import 'package:expense_app_new/providers/receipt_provider.dart';
 
 class AIAssistantScreen extends ConsumerStatefulWidget {
   final String? initialMessage;
@@ -33,11 +34,19 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     super.initState();
     _questionController = TextEditingController();
     
-    if (widget.initialMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialMessage != null) {
         _sendMessage(overrideText: widget.initialMessage);
-      });
-    }
+      } else {
+        // Check secure provider for receipt data
+        final secureText = ref.read(receiptTextProvider);
+        if (secureText != null) {
+          _sendMessage(overrideText: secureText);
+          // Clear the provider immediately to prevent persistence
+          ref.read(receiptTextProvider.notifier).state = null;
+        }
+      }
+    });
   }
 
   @override

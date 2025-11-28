@@ -15,6 +15,7 @@ import 'package:expense_app_new/services/gamification_service.dart';
 import 'package:expense_app_new/services/recurring_expense_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:expense_app_new/widgets/app_bottom_bar.dart';
+import 'package:expense_app_new/providers/receipt_provider.dart';
 
 class AddExpenseScreen extends ConsumerStatefulWidget {
   const AddExpenseScreen({Key? key}) : super(key: key);
@@ -135,8 +136,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   }
 
   Future<void> _scanReceipt() async {
+    File? imageFile;
     try {
-      final imageFile = await _pickReceiptImage();
+      imageFile = await _pickReceiptImage();
       if (imageFile == null) return;
 
       if (!mounted) return;
@@ -171,12 +173,23 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+      // Security: Delete temporary image file
+      if (imageFile != null) {
+        try {
+          if (await imageFile.exists()) {
+            await imageFile.delete();
+          }
+        } catch (e) {
+          print('Error deleting temp file: $e');
+        }
+      }
     }
   }
 
   Future<void> _scanReceiptWithAI() async {
+    File? imageFile;
     try {
-      final imageFile = await _pickReceiptImage();
+      imageFile = await _pickReceiptImage();
       if (imageFile == null) return;
 
       if (!mounted) return;
@@ -188,8 +201,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       
       if (!mounted) return;
       
-      // Navigate to AI Assistant with the cleaned text prefixed for robust processing
-      context.push('/ai', extra: 'Analyze Receipt:\n$cleanedText');
+      // Security: Pass data via provider instead of navigation arguments
+      ref.read(receiptTextProvider.notifier).state = 'Analyze Receipt:\n$cleanedText';
+      context.push('/ai');
       
     } catch (e) {
       if (!mounted) return;
@@ -199,6 +213,16 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+      // Security: Delete temporary image file
+      if (imageFile != null) {
+        try {
+          if (await imageFile.exists()) {
+            await imageFile.delete();
+          }
+        } catch (e) {
+          print('Error deleting temp file: $e');
+        }
       }
     }
   }
@@ -456,6 +480,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         DropdownMenuItem(value: 'USD', child: Text('USD (\$)')),
                         DropdownMenuItem(value: 'EUR', child: Text('EUR (€)')),
                         DropdownMenuItem(value: 'GBP', child: Text('GBP (£)')),
+                        DropdownMenuItem(value: 'AUD', child: Text('AUD (A\$)')),
+                        DropdownMenuItem(value: 'CAD', child: Text('CAD (C\$)')),
+                        DropdownMenuItem(value: 'JPY', child: Text('JPY (¥)')),
+                        DropdownMenuItem(value: 'CNY', child: Text('CNY (¥)')),
                       ],
                       onChanged: (val) => setState(() => _selectedCurrency = val!),
                     ),
@@ -476,8 +504,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         if (value?.isEmpty ?? true) {
                           return 'Please enter amount';
                         }
-                        if (double.tryParse(value!) == null) {
+                        final parsedValue = double.tryParse(value!);
+                        if (parsedValue == null) {
                           return 'Please enter valid amount';
+                        }
+                        if (parsedValue <= 0) {
+                          return 'Please enter an amount greater than zero';
                         }
                         return null;
                       },

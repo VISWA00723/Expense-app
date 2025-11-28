@@ -80,7 +80,10 @@ class ExportService {
             children: [
               pw.Text('Total Expenses:', style: pw.TextStyle(fontSize: 16)),
               pw.Text(
-                NumberFormat.currency(symbol: '₹').format(totalAmount),
+                // Note: Total is mixed currency, defaulting to INR for total or need multi-currency total logic
+                // For now, we'll just show the number, or assume base currency.
+                // Ideally, we should convert all to base currency.
+                NumberFormat.simpleCurrency(name: 'INR').format(totalAmount),
                 style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.red900),
               ),
             ],
@@ -92,7 +95,7 @@ class ExportService {
               e.date,
               e.title,
               e.categoryId.toString(), // TODO: Map to category name
-              NumberFormat.currency(symbol: '₹').format(e.amount),
+              NumberFormat.simpleCurrency(name: e.currencyCode).format(e.amount),
             ]).toList(),
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),

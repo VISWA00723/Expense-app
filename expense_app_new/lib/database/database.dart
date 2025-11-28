@@ -209,8 +209,14 @@ class AppDatabase extends _$AppDatabase {
       (delete(expenseCategories)..where((tbl) => tbl.id.equals(categoryId))).go().then((val) => val > 0);
 
   // ===== EXPENSE OPERATIONS =====
-  Future<int> insertExpense(ExpensesCompanion expense) =>
-      into(expenses).insert(expense);
+  Future<int> insertExpense(ExpensesCompanion expense) {
+    // Validate currency code
+    final allowedCurrencies = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'JPY', 'CNY'];
+    if (expense.currencyCode.present && !allowedCurrencies.contains(expense.currencyCode.value)) {
+      throw ArgumentError('Invalid currency code: ${expense.currencyCode.value}. Allowed: $allowedCurrencies');
+    }
+    return into(expenses).insert(expense);
+  }
   
   Future<List<Expense>> getUserExpenses(int userId) =>
       (select(expenses)..where((tbl) => tbl.userId.equals(userId))).get();

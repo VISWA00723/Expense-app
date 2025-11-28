@@ -23,3 +23,29 @@
 -dontwarn com.google.android.play.core.splitcompat.**
 -dontwarn com.google.android.play.core.splitinstall.**
 -dontwarn com.google.android.play.core.tasks.**
+
+# Biometrics (local_auth)
+-keep class io.flutter.plugins.localauth.** { *; }
+-keep class androidx.biometric.** { *; }
+-dontwarn androidx.biometric.**
+
+# Speech to Text
+-keep class com.csdcorp.speech_to_text.** { *; }
+-dontwarn com.google.android.speech.IWSpeechService
+
+# Drift (Database)
+# Keep generated database classes and tables
+-keep class * extends androidx.room.RoomDatabase
+-keep class * extends androidx.room.Entity
+-keep class * extends androidx.room.Dao
+-dontwarn androidx.room.paging.**
+
+# Flutter Local Notifications
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+-dontwarn com.dexterous.flutterlocalnotifications.**
+
+# General Safety for Data Models (Reflection/Serialization)
+-keepnames class com.example.expense_app_new.database.** { *; }
+-keepclassmembers class com.example.expense_app_new.database.** {
+    <fields>;
+}

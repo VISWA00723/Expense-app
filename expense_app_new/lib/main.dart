@@ -23,7 +23,6 @@ import 'package:expense_app_new/providers/theme_provider.dart';
 import 'package:expense_app_new/services/notification_service.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:expense_app_new/screens/voice_overlay_screen.dart';
-import 'package:expense_app_new/services/sms_service.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -130,15 +129,6 @@ void main() async {
   
   // Initialize notifications
   await NotificationService.initialize();
-  
-  // Initialize SMS Service (Android only)
-  // We wrap in try-catch as it might fail on non-Android or if permissions denied initially
-  try {
-    final smsService = SmsService();
-    await smsService.initialize();
-  } catch (e) {
-    print('SMS Service initialization failed: $e');
-  }
   
   AdaptiveRefreshRate.enableAdaptiveRefreshRate();
   runApp(const ProviderScope(child: MyApp()));

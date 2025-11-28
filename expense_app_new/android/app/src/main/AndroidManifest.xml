@@ -16,11 +16,6 @@
 
     <!-- 🎙️ REQUIRED for Voice Automation -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-
-    <!-- 📱 REQUIRED for SMS Parsing -->
-    <!-- NOTE: You must declare the restricted permission category and provide justification in Play Console before publishing. -->
-    <uses-permission android:name="android.permission.READ_SMS"/>
-    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
     
     <!-- Biometric permission is automatically added by local_auth plugin -->
 

@@ -73,7 +73,8 @@ class ReceiptScanningService {
     // Regex to find currency-like numbers: 
     // Matches: 1,234.56 | 1234.56 | 1234
     // We look for numbers that might have a currency symbol before them
-    final amountRegex = RegExp(r'(?:[\$€£₹]|Rs\.?|INR)?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})');
+    // Supported: $, €, £, ₹, ¥, A$, C$, Rs, INR, USD, EUR, GBP, AUD, CAD, JPY, CNY
+    final amountRegex = RegExp(r'(?:[\$€£₹¥]|Rs\.?|INR|USD|EUR|GBP|AUD|CAD|JPY|CNY|[A-Z]{1,3}\$)?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})');
 
     for (final line in lines) {
       final lower = line.toLowerCase();
