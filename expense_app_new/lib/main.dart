@@ -23,16 +23,56 @@ import 'package:expense_app_new/providers/theme_provider.dart';
 import 'package:expense_app_new/services/notification_service.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:expense_app_new/screens/voice_overlay_screen.dart';
+import 'package:expense_app_new/services/bootstrap_service.dart';
+import 'package:expense_app_new/screens/splash_screen.dart';
+import 'package:expense_app_new/screens/user_guide_screen.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:expense_app_new/services/backup_service.dart';
+import 'package:expense_app_new/screens/settings/backup_settings_screen.dart';
+import 'package:expense_app_new/screens/add_category_screen.dart';
+import 'package:expense_app_new/services/gamification_service.dart';
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    if (task == 'autoBackup') {
+      try {
+        // Ensure Flutter bindings are initialized for path_provider
+        WidgetsFlutterBinding.ensureInitialized();
+        await BackupService.createBackup(isManual: false);
+        return Future.value(true);
+      } catch (e) {
+        print('Auto backup failed: $e');
+        return Future.value(false);
+      }
+    }
+    return Future.value(true);
+  });
+}
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/splash',
     redirect: (context, state) {
+      // Check bootstrap state
+      final bootstrapState = ref.watch(bootstrapStateProvider);
+      
+      // If not initialized, show splash
+      if (bootstrapState != BootstrapState.complete) {
+        return '/splash';
+      }
+
       // Check if user is authenticated
       final isAuthenticated = ref.watch(isAuthenticatedProvider);
       final isLoggingIn = state.matchedLocation == '/login';
       final isSigningUp = state.matchedLocation == '/signup';
       final isSettingUp = state.matchedLocation == '/profile-setup';
+      final isSplash = state.matchedLocation == '/splash';
+
+      // If on splash and initialized, go to login (which will redirect to dashboard if auth)
+      if (isSplash) {
+        return isAuthenticated ? '/dashboard' : '/login';
+      }
 
       // If not authenticated, redirect to login
       if (!isAuthenticated && !isLoggingIn && !isSigningUp && !isSettingUp) {
@@ -47,6 +87,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       // Auth Routes
       GoRoute(
         path: '/login',
@@ -117,18 +161,32 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           barrierDismissible: true,
         ),
       ),
+      GoRoute(
+        path: '/user-guide',
+        builder: (context, state) => const UserGuideScreen(),
+      ),
+      GoRoute(
+        path: '/backup-settings',
+        builder: (context, state) => const BackupSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/add-category',
+        builder: (context, state) => const AddCategoryScreen(),
+      ),
     ],
   );
 });
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  print('🔥 Initializing Firebase...');
-  await Firebase.initializeApp();
-  print('✅ Firebase initialized successfully');
   
-  // Initialize notifications
-  await NotificationService.initialize();
+  // Initialize Workmanager for background tasks
+  Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: false,
+  );
+
+  // Firebase and Notification init moved to BootstrapService
   
   AdaptiveRefreshRate.enableAdaptiveRefreshRate();
   runApp(const ProviderScope(child: MyApp()));
@@ -141,11 +199,29 @@ class MyApp extends ConsumerStatefulWidget {
   ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends ConsumerState<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _setupQuickActions();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        print('🔄 [App] Resumed from background, updating streak...');
+        ref.read(gamificationServiceProvider).updateStreak(user.id);
+      }
+    }
   }
 
   void _setupQuickActions() {
@@ -174,11 +250,18 @@ class _MyAppState extends ConsumerState<MyApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(goRouterProvider);
     final themeState = ref.watch(themeProvider);
+    
+    ThemeData lightTheme;
+    if (themeState.lightStyle == 'pink') {
+      lightTheme = AppTheme.lightThemePink;
+    } else {
+      lightTheme = AppTheme.lightTheme;
+    }
 
     return MaterialApp.router(
       title: 'Expense Tracker',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: lightTheme,
       darkTheme: themeState.darkStyle == 'black' 
           ? AppTheme.darkThemeBlack 
           : AppTheme.darkThemePurple,

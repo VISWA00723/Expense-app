@@ -7,12 +7,12 @@ final gamificationServiceProvider = Provider<GamificationService>((ref) {
   return GamificationService(ref.read(databaseProvider));
 });
 
-final userStatsStreamProvider = StreamProvider.family<UserStat?, int>((ref, userId) {
-  return ref.watch(gamificationServiceProvider).watchUserStats(userId);
+final userStatsStreamProvider = StreamProvider.autoDispose.family<UserStat?, int>((ref, userId) {
+  return ref.watch(gamificationServiceProvider).watchUserStats(userId).distinct();
 });
 
-final unlockedAchievementsStreamProvider = StreamProvider.family<List<Achievement>, int>((ref, userId) {
-  return ref.watch(gamificationServiceProvider).watchUnlockedAchievements(userId);
+final unlockedAchievementsStreamProvider = StreamProvider.autoDispose.family<List<Achievement>, int>((ref, userId) {
+  return ref.watch(gamificationServiceProvider).watchUnlockedAchievements(userId).distinct();
 });
 
 final allAchievementsFutureProvider = FutureProvider<List<Achievement>>((ref) async {
@@ -27,10 +27,7 @@ class GamificationService {
   // Initialize achievements if they don't exist
   Future<void> initializeAchievements() async {
     print('🏆 [Gamification] Initializing achievements...');
-    // We remove the early return to ensure new achievements are added for existing users
-    // final count = await (db.select(db.achievements)).get().then((l) => l.length);
-    // if (count > 0) { ... }
-
+    
     final achievements = [
       AchievementsCompanion(
         id: const Value('first_expense'),
@@ -106,15 +103,23 @@ class GamificationService {
       ),
     ];
 
-    for (final achievement in achievements) {
-      await db.into(db.achievements).insertOnConflictUpdate(achievement);
+    // Check if achievements already exist to avoid unnecessary writes
+    final count = await db.select(db.achievements).get().then((l) => l.length);
+    if (count >= achievements.length) {
+      print('🏆 [Gamification] Achievements already initialized ($count)');
+      return;
     }
+
+    await db.batch((batch) {
+      batch.insertAllOnConflictUpdate(db.achievements, achievements);
+    });
     print('🏆 [Gamification] Achievements initialized/updated successfully');
   }
 
   // Ensure gamification data is initialized for a user
   Future<void> ensureInitialized(int userId) async {
     print('🏆 [Gamification] Ensuring initialization for user $userId');
+    // Run initialization in parallel if possible, but here we need achievements first
     await initializeAchievements();
     
     final stats = await (db.select(db.userStats)..where((t) => t.userId.equals(userId))).getSingleOrNull();
@@ -189,11 +194,20 @@ class GamificationService {
     final now = DateTime.now();
     final currentMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     
-    final user = await db.getUserById(userId);
-    if (user == null) return 50;
+    // Parallelize independent queries
+    final results = await Future.wait([
+      db.getUserById(userId),
+      db.getTotalIncomeForMonth(userId, currentMonth),
+      db.getTotalByMonth(userId, currentMonth),
+      (db.select(db.userStats)..where((t) => t.userId.equals(userId))).getSingleOrNull(),
+    ]);
 
-    final totalIncome = await db.getTotalIncomeForMonth(userId, currentMonth);
-    final totalExpenses = await db.getTotalByMonth(userId, currentMonth);
+    final user = results[0] as User?;
+    final totalIncome = results[1] as double;
+    final totalExpenses = results[2] as double;
+    var stats = results[3] as UserStat?;
+
+    if (user == null) return 50;
     
     double score = 50.0;
 
@@ -208,18 +222,14 @@ class GamificationService {
     }
 
     // 2. Consistency (Streak) (up to 10 points)
-    final stats = await (db.select(db.userStats)..where((t) => t.userId.equals(userId))).getSingleOrNull();
-    
     // If stats are missing, initialize them
     if (stats == null) {
       await ensureInitialized(userId);
       // Re-fetch stats
-      final newStats = await (db.select(db.userStats)..where((t) => t.userId.equals(userId))).getSingleOrNull();
-      if (newStats != null) {
-        if (newStats.currentStreak >= 7) score += 10;
-        else if (newStats.currentStreak >= 3) score += 5;
-      }
-    } else {
+      stats = await (db.select(db.userStats)..where((t) => t.userId.equals(userId))).getSingleOrNull();
+    }
+    
+    if (stats != null) {
       if (stats.currentStreak >= 7) score += 10;
       else if (stats.currentStreak >= 3) score += 5;
     }
@@ -236,12 +246,6 @@ class GamificationService {
     // Update stats
     if (stats != null) {
       await db.update(db.userStats).replace(stats.copyWith(wellnessScore: finalScore));
-    } else {
-      // If stats were null (and we just initialized), update the newly created stats
-      final newStats = await (db.select(db.userStats)..where((t) => t.userId.equals(userId))).getSingleOrNull();
-      if (newStats != null) {
-        await db.update(db.userStats).replace(newStats.copyWith(wellnessScore: finalScore));
-      }
     }
 
     return finalScore;

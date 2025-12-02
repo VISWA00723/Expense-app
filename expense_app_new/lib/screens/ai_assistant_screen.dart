@@ -9,6 +9,7 @@ import 'package:expense_app_new/models/expense_model.dart';
 import 'package:expense_app_new/database/database.dart';
 import 'package:expense_app_new/theme/app_theme.dart';
 import 'package:expense_app_new/services/api_service.dart' as api;
+import 'package:expense_app_new/services/api_service.dart' show ExpenseData;
 import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:expense_app_new/services/gamification_service.dart';
@@ -70,6 +71,94 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     });
   }
 
+  ExpenseData? _pendingExpense;
+
+  Future<void> _confirmExpense() async {
+    if (_pendingExpense == null) return;
+
+    setState(() => _isLoading = true);
+    final db = ref.read(databaseProvider);
+    final user = ref.read(currentUserProvider);
+
+    try {
+      if (user == null) throw Exception('User not found');
+
+      // Get categories to find the ID
+      final categoriesAsync = await ref.read(userCategoriesProvider(user.id).future);
+      final categories = categoriesAsync;
+      
+      final category = categories.firstWhere(
+        (c) => c.name.toLowerCase() == _pendingExpense!.category.toLowerCase(),
+        orElse: () => categories.first,
+      );
+
+      // Nuanced Date Validation
+      String finalDate;
+      try {
+        final parsedDate = DateTime.parse(_pendingExpense!.date);
+        final now = DateTime.now();
+        final minDate = now.subtract(const Duration(days: 365));
+        final maxDate = now.add(const Duration(days: 3));
+
+        if (parsedDate.isAfter(minDate) && parsedDate.isBefore(maxDate)) {
+          finalDate = _pendingExpense!.date;
+        } else {
+          finalDate = now.toIso8601String();
+        }
+      } catch (e) {
+        finalDate = DateTime.now().toIso8601String();
+      }
+
+      // Create expense in database
+      await db.into(db.expenses).insert(ExpensesCompanion(
+        userId: drift.Value(user.id),
+        title: drift.Value(_pendingExpense!.title),
+        amount: drift.Value(_pendingExpense!.amount),
+        categoryId: drift.Value(category.id),
+        date: drift.Value(finalDate),
+        notes: drift.Value(_pendingExpense!.notes),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
+
+      // Update gamification
+      final gamificationService = ref.read(gamificationServiceProvider);
+      await gamificationService.checkExpenseAchievements(user.id);
+      await gamificationService.calculateWellnessScore(user.id);
+      
+      // Invalidate providers
+      ref.invalidate(userExpensesProvider);
+      ref.invalidate(currentMonthTotalProvider);
+      ref.invalidate(recentExpensesProvider);
+      ref.invalidate(spendingByCategoryProvider);
+      
+      // Add success message
+      await db.addChatMessage(AiChatMessagesCompanion(
+        sessionId: drift.Value(_currentSessionId!),
+        isUser: const drift.Value(false),
+        content: drift.Value('✅ Expense added successfully!'),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
+
+      setState(() {
+        _pendingExpense = null;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding expense: $e')),
+      );
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _cancelExpense() {
+    setState(() {
+      _pendingExpense = null;
+    });
+    // Optional: Add a system message saying cancelled
+  }
+
   Future<void> _sendMessage({String? overrideText}) async {
     try {
       final text = overrideText ?? _questionController.text.trim();
@@ -83,9 +172,6 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
 
       if (user == null) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: User session not found. Please try again.')),
-        );
         return;
       }
 
@@ -102,19 +188,19 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
         createdAt: drift.Value(DateTime.now().toIso8601String()),
       ));
 
-      // Get context (expenses and categories)
+      // Get context
       final expenses = await db.getRecentExpenses(user.id, 300);
       final expenseModels = expenses.map((e) => ExpenseModel(
         id: e.id,
         title: e.title,
         amount: e.amount,
-        category: 'Category ${e.categoryId}', // Placeholder, ideally join with categories
+        category: 'Category ${e.categoryId}',
         notes: e.notes,
         date: e.date,
         createdAt: e.createdAt,
       )).toList();
 
-      // Check if user wants to add an expense
+      // Check intent
       final lowerText = text.toLowerCase();
       final isAddIntent = lowerText.contains('add expense') ||
           lowerText.contains('add expens') ||
@@ -124,79 +210,34 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
       api.AIResponse response;
       
       if (isAddIntent) {
-        // Get categories for AI to choose from
         final categoriesAsync = await ref.read(userCategoriesProvider(user.id).future);
         final categories = categoriesAsync;
-        
-        if (categories.isEmpty) {
-          throw Exception('No categories available');
-        }
-        
         final categoryNames = categories.map((c) => c.name).toList();
         
-        // Call add-expense endpoint
         response = await ref.read(apiServiceProvider).addExpenseWithAI(
           naturalLanguageInput: text,
           recentExpenses: expenseModels,
           availableCategories: categoryNames,
         );
         
-        // If AI returned expense data, create the expense
         if (response.expenseData != null) {
-          final expenseData = response.expenseData!;
+          // Instead of saving, set pending expense
+          setState(() {
+            _pendingExpense = response.expenseData;
+          });
           
-          // Find matching category
-          final category = categories.firstWhere(
-            (c) => c.name.toLowerCase() == expenseData.category.toLowerCase(),
-            orElse: () => categories.first,
-          );
-          
-          // Fix: If AI returns a date from a previous year (likely hallucinated/default), use today
-          final finalDate = DateTime.parse(expenseData.date).year < DateTime.now().year 
-              ? DateTime.now().toIso8601String() 
-              : expenseData.date;
-
-          // Create expense in database
-          print('Creating expense with date: $finalDate (Original: ${expenseData.date})');
-          await db.into(db.expenses).insert(ExpensesCompanion(
-            userId: drift.Value(user.id),
-            title: drift.Value(expenseData.title),
-            amount: drift.Value(expenseData.amount),
-            categoryId: drift.Value(category.id),
-            date: drift.Value(finalDate),
-            notes: drift.Value(expenseData.notes),
-            createdAt: drift.Value(DateTime.now().toIso8601String()),
-          ));
-
-          // Check achievements and update wellness score
-          print('Updating gamification...');
-          final gamificationService = ref.read(gamificationServiceProvider);
-          await gamificationService.checkExpenseAchievements(user.id);
-          await gamificationService.calculateWellnessScore(user.id);
-          print('Gamification updated.');
-          
-          // Invalidate dashboard providers to refresh data
-          ref.invalidate(userExpensesProvider);
-          ref.invalidate(currentMonthTotalProvider);
-          ref.invalidate(recentExpensesProvider);
-          ref.invalidate(spendingByCategoryProvider);
-          
-          // Add success confirmation
+          // Add bot message asking for confirmation
           await db.addChatMessage(AiChatMessagesCompanion(
             sessionId: drift.Value(_currentSessionId!),
             isUser: const drift.Value(false),
-            content: drift.Value('✅ Expense added successfully!\n\n${response.answer}'),
+            content: drift.Value('I found the following expense details. Please confirm to add it:\n\n${response.answer}'),
             createdAt: drift.Value(DateTime.now().toIso8601String()),
           ));
           
           setState(() => _isLoading = false);
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-          }
-          return; // Exit early, we've handled the message
+          return;
         }
       } else {
-        // Regular analysis
         response = await ref.read(apiServiceProvider).analyzeExpenses(
           question: text,
           expenses: expenseModels,
@@ -214,8 +255,6 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     } catch (e, stackTrace) {
       print('Error in _sendMessage: $e');
       print(stackTrace);
-      
-      // Try to save error message to chat if session exists
       if (_currentSessionId != null) {
         final db = ref.read(databaseProvider);
         await db.addChatMessage(AiChatMessagesCompanion(
@@ -225,16 +264,9 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
           createdAt: drift.Value(DateTime.now().toIso8601String()),
         ));
       }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
-        // Scroll to bottom
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
             0,
@@ -395,6 +427,72 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
             ),
           ),
 
+          // Confirmation Card
+          if (_pendingExpense != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Theme.of(context).colorScheme.primary),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Confirm Expense Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Title:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text(_pendingExpense!.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Amount:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text('₹${_pendingExpense!.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Category:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text(_pendingExpense!.category, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _cancelExpense,
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _confirmExpense,
+                          child: const Text('Confirm & Add'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
           // Input Area
           Container(
             padding: const EdgeInsets.all(16),
@@ -413,8 +511,9 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                 Expanded(
                   child: TextField(
                     controller: _questionController,
+                    enabled: _pendingExpense == null, // Disable input while confirming
                     decoration: InputDecoration(
-                      hintText: 'Ask your financial coach...',
+                      hintText: _pendingExpense != null ? 'Please confirm expense above...' : 'Ask your financial coach...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
@@ -431,8 +530,9 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
-                  onPressed: _isLoading ? null : () => _sendMessage(),
+                  onPressed: (_isLoading || _pendingExpense != null) ? null : () => _sendMessage(),
                   elevation: 0,
+                  backgroundColor: (_isLoading || _pendingExpense != null) ? Colors.grey : null,
                   child: _isLoading
                       ? const SizedBox(
                           width: 24,

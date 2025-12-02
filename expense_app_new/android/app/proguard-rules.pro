@@ -33,19 +33,11 @@
 -keep class com.csdcorp.speech_to_text.** { *; }
 -dontwarn com.google.android.speech.IWSpeechService
 
-# Drift (Database)
-# Keep generated database classes and tables
--keep class * extends androidx.room.RoomDatabase
--keep class * extends androidx.room.Entity
--keep class * extends androidx.room.Dao
--dontwarn androidx.room.paging.**
+# Drift (Database) - No specific Java rules needed for pure Dart/Native implementation
 
 # Flutter Local Notifications
 -keep class com.dexterous.flutterlocalnotifications.** { *; }
 -dontwarn com.dexterous.flutterlocalnotifications.**
 
 # General Safety for Data Models (Reflection/Serialization)
--keepnames class com.example.expense_app_new.database.** { *; }
--keepclassmembers class com.example.expense_app_new.database.** {
-    <fields>;
-}
+

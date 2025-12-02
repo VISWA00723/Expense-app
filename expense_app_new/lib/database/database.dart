@@ -25,6 +25,8 @@ class Incomes extends Table {
   TextColumn get source => text()();
   TextColumn get date => text()(); // ISO format: yyyy-mm-dd
   TextColumn get createdAt => text()();
+
+
 }
 
 class ExpenseCategories extends Table {
@@ -32,6 +34,8 @@ class ExpenseCategories extends Table {
   IntColumn get userId => integer()();
   TextColumn get name => text()();
   TextColumn get icon => text()();
+  IntColumn get color => integer().nullable()(); // Color value (0xFF...)
+  TextColumn get iconPath => text().nullable()(); // Path to custom image
   BoolColumn get isCustom => boolean().withDefault(const Constant(false))();
   TextColumn get createdAt => text()();
 }
@@ -46,6 +50,13 @@ class Expenses extends Table {
   TextColumn get date => text()(); // ISO format: yyyy-mm-dd
   TextColumn get createdAt => text()();
   TextColumn get currencyCode => text().withDefault(const Constant('INR'))();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {id},
+  ];
+
+
 }
 
 class Budgets extends Table {
@@ -119,13 +130,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+        // Create indexes for new installs
+        await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)');
+        await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_category ON expenses(user_id, category_id)');
+        await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)');
       },
       onUpgrade: (Migrator m, int from, int to) async {
         // Migration from v1 to v2: Add new tables
@@ -158,6 +173,20 @@ class AppDatabase extends _$AppDatabase {
         if (from < 5) {
           await m.addColumn(expenses, expenses.currencyCode);
           await m.addColumn(users, users.preferredCurrency);
+        }
+
+        // Migration from v5 to v6: Add Indexes
+        if (from < 6) {
+          // Indexes are added via customConstraints, so we might need to recreate tables or just add indices manually
+          // Drift usually handles index creation if they are part of createAll, but for migration we need to add them.
+          // Since we added customConstraints, we should run custom SQL to create indexes.
+          await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)');
+        }
+
+        // Migration from v6 to v7: Add Custom Category columns
+        if (from < 7) {
+          await m.addColumn(expenseCategories, expenseCategories.color);
+          await m.addColumn(expenseCategories, expenseCategories.iconPath);
         }
       },
     );
@@ -312,12 +341,27 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Get spending by category with IDs for color assignment
-  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId) {
-    return customSelect(
-      '''SELECT ec.id, ec.name, SUM(e.amount) as total FROM expenses e 
+  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId, {String? startDate, String? endDate}) {
+    String query = '''SELECT ec.id, ec.name, SUM(e.amount) as total FROM expenses e 
          JOIN expense_categories ec ON e.category_id = ec.id 
-         WHERE e.user_id = ? GROUP BY ec.id, ec.name''',
-      variables: [Variable.withInt(userId)],
+         WHERE e.user_id = ?''';
+    
+    final variables = <Variable>[Variable.withInt(userId)];
+
+    if (startDate != null) {
+      query += ' AND e.date >= ?';
+      variables.add(Variable.withString(startDate));
+    }
+    if (endDate != null) {
+      query += ' AND e.date <= ?';
+      variables.add(Variable.withString(endDate));
+    }
+
+    query += ' GROUP BY ec.id, ec.name';
+
+    return customSelect(
+      query,
+      variables: variables,
       readsFrom: {expenses, expenseCategories},
     ).watch().map((rows) {
       return rows.map((row) => CategorySpending(

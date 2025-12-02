@@ -50,67 +50,80 @@ class ExportService {
   }
 
   Future<void> exportToPdf(List<Expense> expenses, User user) async {
-    final doc = pw.Document();
-    final font = await PdfGoogleFonts.interRegular();
-    final boldFont = await PdfGoogleFonts.interBold();
+    try {
+      final doc = pw.Document();
+      final font = await PdfGoogleFonts.interRegular();
+      final boldFont = await PdfGoogleFonts.interBold();
 
-    final totalAmount = expenses.fold<double>(0, (sum, e) => sum + e.amount);
+      final currencyTotals = <String, double>{};
+      for (final expense in expenses) {
+        currencyTotals[expense.currencyCode] = (currencyTotals[expense.currencyCode] ?? 0) + expense.amount;
+      }
 
-    doc.addPage(
-      pw.MultiPage(
-        pageTheme: pw.PageTheme(
-          theme: pw.ThemeData.withFont(base: font, bold: boldFont),
-        ),
-        header: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              'Expense Report',
-              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 8),
-            pw.Text('Generated for ${user.name} on ${DateFormat.yMMMd().format(DateTime.now())}'),
-            pw.Divider(),
-            pw.SizedBox(height: 16),
-          ],
-        ),
-        build: (context) => [
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      doc.addPage(
+        pw.MultiPage(
+          pageTheme: pw.PageTheme(
+            theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+          ),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('Total Expenses:', style: pw.TextStyle(fontSize: 16)),
               pw.Text(
-                // Note: Total is mixed currency, defaulting to INR for total or need multi-currency total logic
-                // For now, we'll just show the number, or assume base currency.
-                // Ideally, we should convert all to base currency.
-                NumberFormat.simpleCurrency(name: 'INR').format(totalAmount),
-                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.red900),
+                'Expense Report',
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
               ),
+              pw.SizedBox(height: 8),
+              pw.Text('Generated for ${user.name} on ${DateFormat.yMMMd().format(DateTime.now())}'),
+              pw.Divider(),
+              pw.SizedBox(height: 16),
             ],
           ),
-          pw.SizedBox(height: 24),
-          pw.Table.fromTextArray(
-            headers: ['Date', 'Title', 'Category', 'Amount'],
-            data: expenses.map((e) => [
-              e.date,
-              e.title,
-              e.categoryId.toString(), // TODO: Map to category name
-              NumberFormat.simpleCurrency(name: e.currencyCode).format(e.amount),
-            ]).toList(),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
-            cellAlignments: {
-              0: pw.Alignment.centerLeft,
-              1: pw.Alignment.centerLeft,
-              2: pw.Alignment.centerLeft,
-              3: pw.Alignment.centerRight,
-            },
-          ),
-        ],
-      ),
-    );
+          build: (context) => [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('Total Expenses:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                ...currencyTotals.entries.map((entry) => pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(entry.key, style: pw.TextStyle(fontSize: 14)),
+                    pw.Text(
+                      NumberFormat.simpleCurrency(name: entry.key).format(entry.value),
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.red900),
+                    ),
+                  ],
+                )),
+              ],
+            ),
+            pw.SizedBox(height: 24),
+            pw.Table.fromTextArray(
+              headers: ['Date', 'Title', 'Category', 'Amount'],
+              data: expenses.map((e) => [
+                e.date,
+                e.title,
+                e.categoryId.toString(), // TODO: Map to category name
+                NumberFormat.simpleCurrency(name: e.currencyCode).format(e.amount),
+              ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.centerLeft,
+                3: pw.Alignment.centerRight,
+              },
+            ),
+          ],
+        ),
+      );
 
-    await Printing.sharePdf(bytes: await doc.save(), filename: 'expenses_report.pdf');
+      await Printing.sharePdf(bytes: await doc.save(), filename: 'expenses_report.pdf');
+    } catch (e, stackTrace) {
+      print('Error generating or sharing PDF: $e');
+      print(stackTrace);
+      throw Exception('Failed to generate PDF: $e');
+    }
   }
 }

@@ -8,9 +8,9 @@ final recurringExpenseServiceProvider = Provider<RecurringExpenseService>((ref) 
   return RecurringExpenseService(ref.read(databaseProvider));
 });
 
-final userRecurringExpensesProvider = StreamProvider.family<List<RecurringExpense>, int>((ref, userId) {
+final userRecurringExpensesProvider = StreamProvider.autoDispose.family<List<RecurringExpense>, int>((ref, userId) {
   final service = ref.watch(recurringExpenseServiceProvider);
-  return service.watchRecurringExpenses(userId);
+  return service.watchRecurringExpenses(userId).distinct();
 });
 
 class RecurringExpenseService {

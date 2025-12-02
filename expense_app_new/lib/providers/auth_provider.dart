@@ -36,14 +36,6 @@ final restoreSessionProvider = FutureProvider<User?>((ref) async {
         final authService = ref.watch(authServiceProvider);
         authService.setCurrentUser(user);
 
-        // Ensure gamification is initialized
-        final gamificationService = ref.read(gamificationServiceProvider);
-        await gamificationService.ensureInitialized(user.id);
-
-        // Check for due recurring expenses
-        final recurringService = ref.read(recurringExpenseServiceProvider);
-        await recurringService.checkAndCreateDueExpenses(user.id);
-
         return user;
       }
     }

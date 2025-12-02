@@ -71,10 +71,10 @@ class ReceiptScanningService {
     double? totalLineAmount;
 
     // Regex to find currency-like numbers: 
-    // Matches: 1,234.56 | 1234.56 | 1234
+    // Matches: 1,234.56 | 1234.56 | 1234 | 50.00 | 50
     // We look for numbers that might have a currency symbol before them
     // Supported: $, €, £, ₹, ¥, A$, C$, Rs, INR, USD, EUR, GBP, AUD, CAD, JPY, CNY
-    final amountRegex = RegExp(r'(?:[\$€£₹¥]|Rs\.?|INR|USD|EUR|GBP|AUD|CAD|JPY|CNY|[A-Z]{1,3}\$)?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})');
+    final amountRegex = RegExp(r'(?:[\$€£₹¥]|Rs\.?|INR|USD|EUR|GBP|AUD|CAD|JPY|CNY|[A-Z]{1,3}\$)?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)');
 
     for (final line in lines) {
       final lower = line.toLowerCase();
@@ -90,6 +90,17 @@ class ReceiptScanningService {
       for (final match in matches) {
         // Group 1 is the number part
         String numStr = match.group(1) ?? '';
+        
+        // Normalize: Remove commas/dots used as thousand separators
+        // Heuristic: If it has a comma and a dot, the dot is likely decimal.
+        // If it has only commas, remove them.
+        // If it has only dots, check if it looks like a thousand separator (e.g. 1.000) or decimal (1.50)
+        
+        // Simple normalization for now: Remove all non-digit and non-dot characters, replacing comma with dot if needed
+        // But wait, 1,234.56 -> 1234.56
+        // 1.234,56 -> 1234.56 (European)
+        
+        // Let's rely on _parseAmount to handle the cleanup, but we need to pass the raw match
         double? val = _parseAmount(numStr);
         
         if (val == null) continue;
@@ -199,23 +210,28 @@ class ReceiptScanningService {
                int p2 = int.parse(match.group(2)!);
                int p3 = int.parse(match.group(3)!);
                
-               if (p3 > 1000) { // YYYY is last
-                 // Check for obvious invalid months/days to help disambiguate
-                 if (p2 > 12) {
-                   // p2 MUST be Day, p1 is Month
-                   return DateTime(p3, p1, p2);
-                 }
-                 if (p1 > 12) {
-                   // p1 MUST be Day, p2 is Month
-                   return DateTime(p3, p2, p1);
-                 }
-                 
-                 // Both <= 12. Ambiguous.
-                 // Default to DD/MM/YYYY (International/India)
-                 return DateTime(p3, p2, p1);
-               } else if (p1 > 1000) { // YYYY is first
+               // Check for YYYY at start (YYYY-MM-DD)
+               if (p1 > 1000) {
                  return DateTime(p1, p2, p3);
                }
+
+               // Assume p3 is year (YYYY or YY)
+               int year = p3;
+               if (year < 100) year += 2000;
+
+               // Check for obvious invalid months/days to help disambiguate
+               if (p2 > 12) {
+                 // p2 MUST be Day, p1 is Month
+                 return DateTime(year, p1, p2);
+               }
+               if (p1 > 12) {
+                 // p1 MUST be Day, p2 is Month
+                 return DateTime(year, p2, p1);
+               }
+               
+               // Both <= 12. Ambiguous.
+               // Default to DD/MM/YYYY (International/India)
+               return DateTime(year, p2, p1);
              }
           }
         } catch (e) {

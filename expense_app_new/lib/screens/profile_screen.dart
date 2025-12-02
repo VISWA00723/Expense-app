@@ -290,8 +290,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 trailing: Icon(Icons.chevron_right, color: colorScheme.onPrimaryContainer),
                 onTap: () {
-                  print('🔘 App Guide button tapped');
-                  context.push('/onboarding');
+                  context.push('/user-guide');
                 },
               ),
             ),
@@ -385,21 +384,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 32),
 
-            // Data Export Section
+            // Data Management Section
             Text(
-              'Data Export',
+              'Data Management',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
             ),
             const SizedBox(height: 16),
+            
+            // Backup & Restore Tile
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.security),
+                title: const Text('Backup & Restore'),
+                subtitle: const Text('Encrypted cloud backup'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/backup-settings'),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Export Buttons
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _isLoading ? null : _exportCsv,
                     icon: const Icon(Icons.table_chart_outlined),
-                    label: const Text('CSV'),
+                    label: const Text('Export CSV'),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -407,7 +420,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _isLoading ? null : _exportPdf,
                     icon: const Icon(Icons.picture_as_pdf_outlined),
-                    label: const Text('PDF'),
+                    label: const Text('Export PDF'),
                   ),
                 ),
               ],
@@ -466,6 +479,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ],
                             onChanged: (style) {
                               if (style != null) notifier.setDarkStyle(style);
+                            },
+                          ),
+                        ),
+                      ),
+
+                    // Light Theme Style
+                    if (themeState.mode != ThemeMode.dark)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.palette_outlined),
+                          title: const Text('Light Theme Style'),
+                          trailing: DropdownButton<String>(
+                            value: themeState.lightStyle,
+                            underline: const SizedBox(),
+                            items: const [
+                              DropdownMenuItem(value: 'pink', child: Text('Pink & Purple')),
+                              DropdownMenuItem(value: 'standard', child: Text('Standard Blue')),
+                            ],
+                            onChanged: (style) {
+                              if (style != null) notifier.setLightStyle(style);
                             },
                           ),
                         ),
