@@ -825,7 +825,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       validator: (value) {
                         if (value?.isEmpty ?? true) {
                           return 'Please enter amount';

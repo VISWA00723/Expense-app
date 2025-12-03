@@ -41,7 +41,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
             prefixText: '₹ ',
             border: OutlineInputBorder(),
           ),
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
         ),
         actions: [

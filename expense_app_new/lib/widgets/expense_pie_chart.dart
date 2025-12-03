@@ -99,12 +99,12 @@ class _ExpensePieChartState extends ConsumerState<ExpensePieChart> {
 
             // Center Text
             String centerLabel = 'Total Spent';
-            String centerAmount = '₹${total.toStringAsFixed(0)}';
+            String centerAmount = '₹${total.toStringAsFixed(2)}';
             
             if (touchedIndex != -1 && touchedIndex < sortedData.length) {
               final item = sortedData[touchedIndex];
               centerLabel = item.categoryName;
-              centerAmount = '₹${item.totalAmount.toStringAsFixed(0)}';
+              centerAmount = '₹${item.totalAmount.toStringAsFixed(2)}';
             }
 
             return Column(
@@ -168,11 +168,14 @@ class _ExpensePieChartState extends ConsumerState<ExpensePieChart> {
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            centerAmount,
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              centerAmount,
+                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),

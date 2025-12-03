@@ -157,11 +157,12 @@ class _AddCategoryScreenState extends ConsumerState<AddCategoryScreen> {
       return;
     }
 
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
     setState(() => _isLoading = true);
 
     try {
-      final user = ref.read(currentUserProvider);
-      if (user == null) return;
 
       final db = ref.read(databaseProvider);
       

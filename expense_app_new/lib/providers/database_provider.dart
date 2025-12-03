@@ -53,6 +53,11 @@ final userCategoriesProvider = FutureProvider.autoDispose.family<List<ExpenseCat
   return db.getUserCategories(userId);
 });
 
+final categoriesStreamProvider = StreamProvider.autoDispose.family<List<ExpenseCategory>, int>((ref, userId) {
+  final db = ref.watch(databaseProvider);
+  return db.watchCategories(userId);
+});
+
 // User incomes
 final userIncomesProvider = FutureProvider.autoDispose.family<List<Income>, int>((ref, userId) async {
   final db = ref.watch(databaseProvider);
@@ -76,3 +81,64 @@ final chatMessagesProvider = StreamProvider.autoDispose.family<List<AiChatMessag
   final db = ref.watch(databaseProvider);
   return db.watchChatMessages(sessionId).distinct();
 });
+
+// Assets for user
+final assetsProvider = StreamProvider.autoDispose.family<List<Asset>, int>((ref, userId) {
+  final db = ref.watch(databaseProvider);
+  return db.watchAssets(userId).distinct();
+});
+
+// Liabilities for user
+final liabilitiesProvider = StreamProvider.autoDispose.family<List<Liability>, int>((ref, userId) {
+  final db = ref.watch(databaseProvider);
+  return db.watchLiabilities(userId).distinct();
+});
+
+// Net Worth History for user
+final netWorthHistoryProvider = StreamProvider.autoDispose.family<List<NetWorthHistoryData>, int>((ref, userId) {
+  final db = ref.watch(databaseProvider);
+  return db.watchNetWorthHistory(userId).distinct();
+});
+
+// Envelopes for user/month/year
+final envelopesProvider = StreamProvider.autoDispose.family<List<Envelope>, (int, int, int)>((ref, params) {
+  final (userId, month, year) = params;
+  final db = ref.watch(databaseProvider);
+  return db.watchEnvelopes(userId, month, year).distinct();
+});
+
+// Monthly Income Provider
+final monthlyIncomeProvider = StreamProvider.autoDispose.family<double, (int, int, int)>((ref, params) {
+  final (userId, month, year) = params;
+  final db = ref.watch(databaseProvider);
+  
+  return (db.select(db.incomes)..where((t) => t.userId.equals(userId))).watch().map((incomes) {
+    return incomes.where((i) {
+      final date = DateTime.parse(i.date);
+      return date.month == month && date.year == year;
+    }).fold(0.0, (sum, item) => sum + item.amount);
+  });
+});
+
+// Monthly Allocations Provider
+final monthlyAllocationsProvider = StreamProvider.autoDispose.family<double, (int, int, int)>((ref, params) {
+  final (userId, month, year) = params;
+  final db = ref.watch(databaseProvider);
+  
+  return db.watchEnvelopes(userId, month, year).map((envelopes) {
+    return envelopes.fold(0.0, (sum, item) => sum + item.amount);
+  });
+});
+
+// To Be Budgeted (Income - Allocations)
+final toBeBudgetedProvider = Provider.autoDispose.family<AsyncValue<double>, (int, int, int)>((ref, params) {
+  final incomeAsync = ref.watch(monthlyIncomeProvider(params));
+  final allocationsAsync = ref.watch(monthlyAllocationsProvider(params));
+
+  return incomeAsync.whenData((income) {
+    return allocationsAsync.whenData((allocations) {
+      return income - allocations;
+    }).value ?? 0.0;
+  });
+});
+

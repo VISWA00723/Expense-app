@@ -112,7 +112,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
                     final newCategory = categories.firstWhere((c) => c.id == selectedCategoryId);
                     await AutoCategorizer.initialize();
                     await AutoCategorizer.learnRule(titleController.text, newCategory.name);
-                    print('🧠 Learned rule: "${titleController.text}" -> ${newCategory.name}');
+
                   }
                   
                   if (!context.mounted) return;

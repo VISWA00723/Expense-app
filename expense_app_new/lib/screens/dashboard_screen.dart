@@ -11,6 +11,7 @@ import 'package:expense_app_new/theme/app_theme.dart';
 import 'package:expense_app_new/services/analytics_service.dart';
 import 'package:expense_app_new/widgets/notification_permission_dialog.dart';
 import 'package:expense_app_new/services/gamification_service.dart';
+import 'package:expense_app_new/services/financial_advisor_service.dart';
 import 'package:expense_app_new/widgets/app_bottom_bar.dart';
 
 import 'package:expense_app_new/widgets/expense_pie_chart.dart';
@@ -95,8 +96,8 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.account_balance_wallet),
-            onPressed: () => context.push('/budget'),
-            tooltip: 'Budgets',
+            onPressed: () => context.push('/envelope-budget'),
+            tooltip: 'Envelope Budget',
           ),
           IconButton(
             icon: const Icon(Icons.assessment),
@@ -144,7 +145,7 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -152,54 +153,35 @@ class DashboardScreen extends ConsumerWidget {
                       'Welcome back,',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            height: 1.0,
                           ),
                     ),
                     Text(
                       user.name,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.bold,
+                            height: 1.1,
                           ),
                     ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
 
-            // Motivational Message
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.auto_graph,
-                    size: 20,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'You are doing great! Keep tracking your expenses.', // Placeholder for dynamic message
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontWeight: FontWeight.w500,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
+            // 1. Wellness & Net Worth (Top Stats)
+            Row(
+              children: [
+                Expanded(child: _WellnessScoreCard(userId: user.id, isCompact: true)),
+                const SizedBox(width: 12),
+                Expanded(child: _NetWorthCard(userId: user.id, isCompact: true)),
+              ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            // Wellness Score
-            _WellnessScoreCard(userId: user.id),
+            // 2. Daily Insight (Contextual Tip)
+            _DailyInsightCard(userId: user.id),
+            const SizedBox(height: 16),
             const SizedBox(height: 24),
 
             // Salary Overview Card
@@ -334,7 +316,7 @@ class _SalaryOverviewCard extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '₹${(user.monthlySalary).toStringAsFixed(0)}',
+                              '₹${(user.monthlySalary).toStringAsFixed(2)}',
                               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -441,7 +423,7 @@ class _SalaryOverviewCard extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '₹${currentSpent.toStringAsFixed(0)}',
+                              '₹${currentSpent.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -449,7 +431,7 @@ class _SalaryOverviewCard extends ConsumerWidget {
                               ),
                             ),
                             Text(
-                              '₹${remaining.toStringAsFixed(0)} left',
+                              '₹${remaining.toStringAsFixed(2)} left',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.9),
                                 fontWeight: FontWeight.w500,
@@ -610,7 +592,7 @@ class _RecentExpenses extends ConsumerWidget {
                               style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                             ),
                             trailing: Text(
-                              '₹${expense.amount.toStringAsFixed(0)}',
+                              '₹${expense.amount.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -639,11 +621,11 @@ class _RecentExpenses extends ConsumerWidget {
 
 class _WellnessScoreCard extends ConsumerWidget {
   final int userId;
-  const _WellnessScoreCard({required this.userId});
+  final bool isCompact;
+  const _WellnessScoreCard({required this.userId, this.isCompact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final gamificationService = ref.watch(gamificationServiceProvider);
     final statsAsync = ref.watch(userStatsStreamProvider(userId));
 
     return GestureDetector(
@@ -653,76 +635,204 @@ class _WellnessScoreCard extends ConsumerWidget {
           if (stats == null) return const SizedBox.shrink();
           
           return Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
+            height: isCompact ? 110 : null,
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.health_and_safety, color: Colors.white),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Financial Wellness',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.health_and_safety, color: Colors.white, size: 16),
+                    ),
+                    if (isCompact)
+                       Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.local_fire_department, size: 10, color: Colors.orange),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${stats.currentStreak}',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            '${stats.wellnessScore}',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.local_fire_department, size: 16, color: Colors.orange),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${stats.currentStreak} day streak',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-                const Icon(Icons.chevron_right),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Wellness',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                      ),
+                    ),
+                    Text(
+                      '${stats.wellnessScore}',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           );
         },
-        loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+        loading: () => const SizedBox(height: 140, child: Center(child: CircularProgressIndicator())),
         error: (e, s) => const SizedBox.shrink(),
       ),
+    );
+  }
+}
+
+class _NetWorthCard extends ConsumerWidget {
+  final int userId;
+  final bool isCompact;
+  const _NetWorthCard({required this.userId, this.isCompact = false});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final assetsAsync = ref.watch(assetsProvider(userId));
+    final liabilitiesAsync = ref.watch(liabilitiesProvider(userId));
+
+    return GestureDetector(
+      onTap: () => context.push('/net-worth'),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        height: isCompact ? 110 : null,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.tertiary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.account_balance, color: Colors.white, size: 16),
+                ),
+                // Removed arrow icon as requested for cleaner look
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Net Worth',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onTertiaryContainer.withOpacity(0.8),
+                  ),
+                ),
+                if (assetsAsync.isLoading || liabilitiesAsync.isLoading)
+                  const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                else
+                  Builder(
+                    builder: (context) {
+                      final assets = assetsAsync.value ?? [];
+                      final liabilities = liabilitiesAsync.value ?? [];
+                      final totalAssets = assets.fold(0.0, (sum, item) => sum + item.value);
+                      final totalLiabilities = liabilities.fold(0.0, (sum, item) => sum + item.remainingAmount);
+                      final netWorth = totalAssets - totalLiabilities;
+                      
+                      return Text(
+                        NumberFormat.compactCurrency(symbol: '₹', decimalDigits: 1).format(netWorth),
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onTertiaryContainer,
+                        ),
+                      );
+                    }
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyInsightCard extends ConsumerWidget {
+  final int userId;
+  const _DailyInsightCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<String>(
+      future: ref.read(financialAdvisorServiceProvider).getDailyInsight(userId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.tertiaryContainer.withOpacity(0.6),
+                Theme.of(context).colorScheme.tertiaryContainer.withOpacity(0.3),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Theme.of(context).colorScheme.tertiary.withOpacity(0.1)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(Icons.auto_awesome, size: 20, color: Theme.of(context).colorScheme.tertiary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  snapshot.data!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onTertiaryContainer,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

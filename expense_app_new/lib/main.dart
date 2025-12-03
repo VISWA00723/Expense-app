@@ -30,6 +30,8 @@ import 'package:workmanager/workmanager.dart';
 import 'package:expense_app_new/services/backup_service.dart';
 import 'package:expense_app_new/screens/settings/backup_settings_screen.dart';
 import 'package:expense_app_new/screens/add_category_screen.dart';
+import 'package:expense_app_new/screens/net_worth_screen.dart';
+import 'package:expense_app_new/screens/envelope_budget_screen.dart';
 import 'package:expense_app_new/services/gamification_service.dart';
 
 @pragma('vm:entry-point')
@@ -189,6 +191,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/add-category',
         builder: (context, state) => const AddCategoryScreen(),
+      ),
+      GoRoute(
+        path: '/net-worth',
+        builder: (context, state) => const NetWorthScreen(),
+      ),
+      GoRoute(
+        path: '/envelope-budget',
+        builder: (context, state) => const EnvelopeBudgetScreen(),
       ),
     ],
   );
