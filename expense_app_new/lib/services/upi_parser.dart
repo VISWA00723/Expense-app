@@ -2,12 +2,17 @@ class UpiParser {
   static Map<String, dynamic> parseResponse(String? response) {
     if (response == null || response.isEmpty) return {};
 
-    final parts = response.split('&');
     final Map<String, dynamic> data = {};
+    final parts = response.split('&');
 
-    for (var p in parts) {
-      final t = p.split('=');
-      if (t.length == 2) data[t[0]] = t[1];
+    for (var part in parts) {
+      if (part.isEmpty) continue;
+      final idx = part.indexOf('=');
+      if (idx > 0) {
+        final key = part.substring(0, idx);
+        final value = part.substring(idx + 1);
+        data[key] = value;
+      }
     }
 
     return data;

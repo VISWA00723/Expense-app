@@ -16,11 +16,12 @@ class SecurityService {
   
   static encrypt.Key get _key => encrypt.Key.fromUtf8(_keyParts.join(''));
   
-  // Using a fixed IV for simplicity in this specific backup/restore context 
-  // where the key is also fixed. Ideally, IV should be random and prepended to the file.
-  // Let's prepend IV for better security practice even with fixed key.
+  // Use a per-encryption random IV and prepend it to the ciphertext.
+  // Key is fixed for "app-only" decryption; for stronger security, derive it
+  // from user credentials or Android Keystore.
   
   static Future<void> encryptFile(File inputFile, File outputFile) async {
+    // TODO: For large backup files, consider moving to a streaming API (chunked read/encrypt/write) to keep memory usage predictable.
     final fileBytes = await inputFile.readAsBytes();
     
     final iv = encrypt.IV.fromSecureRandom(16);
@@ -36,6 +37,10 @@ class SecurityService {
   static Future<void> decryptFile(File inputFile, File outputFile) async {
     final fileBytes = await inputFile.readAsBytes();
     
+    if (fileBytes.length < 16) {
+      throw FormatException('Encrypted file is too short to contain IV and ciphertext');
+    }
+
     // Extract IV (first 16 bytes)
     final ivBytes = fileBytes.sublist(0, 16);
     final encryptedBytes = fileBytes.sublist(16);

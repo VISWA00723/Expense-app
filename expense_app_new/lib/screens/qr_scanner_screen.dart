@@ -22,25 +22,45 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           final List<Barcode> barcodes = capture.barcodes;
           for (final barcode in barcodes) {
             final rawValue = barcode.rawValue;
-            if (rawValue != null && rawValue.startsWith('upi://')) {
-              _isProcessing = true;
-              // Extract 'pa' parameter
-              final uri = Uri.parse(rawValue);
-              final vpa = uri.queryParameters['pa'];
-              
-              if (vpa != null) {
-                Navigator.pop(context, vpa);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invalid UPI QR: No Payee Address found')),
-                );
-                _isProcessing = false;
+            if (rawValue == null) continue;
+
+            setState(() => _isProcessing = true);
+
+            if (rawValue.startsWith('upi://')) {
+              try {
+                final uri = Uri.parse(rawValue);
+                final vpa = uri.queryParameters['pa'];
+                
+                if (vpa != null) {
+                  Navigator.pop(context, vpa);
+                  return;
+                } else {
+                  _showError('Invalid UPI QR: No Payee Address found');
+                }
+              } catch (e) {
+                _showError('Malformed UPI QR code');
               }
-              return;
+            } else {
+              _showError('Not a UPI QR code');
             }
+            return;
           }
         },
       ),
     );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    });
   }
 }

@@ -25,11 +25,20 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun startPayment(uri: String?) {
-        if (uri == null) return
-        val intent = Intent(Intent.ACTION_VIEW)
-        intent.data = Uri.parse(uri)
-        val chooser = Intent.createChooser(intent, "Pay with...")
-        startActivityForResult(chooser, UPI_REQUEST)
+        if (uri == null) {
+            pendingResult?.error("INVALID_ARGUMENT", "UPI uri is null", null)
+            pendingResult = null
+            return
+        }
+        try {
+            val intent = Intent(Intent.ACTION_VIEW)
+            intent.data = Uri.parse(uri)
+            val chooser = Intent.createChooser(intent, "Pay with...")
+            startActivityForResult(chooser, UPI_REQUEST)
+        } catch (e: android.content.ActivityNotFoundException) {
+            pendingResult?.error("ACTIVITY_NOT_FOUND", "No UPI app found to handle the intent", null)
+            pendingResult = null
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

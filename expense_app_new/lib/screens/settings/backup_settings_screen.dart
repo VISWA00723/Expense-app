@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,14 +8,17 @@ import 'package:expense_app_new/services/backup_service.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-class BackupSettingsScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:expense_app_new/providers/database_provider.dart';
+
+class BackupSettingsScreen extends ConsumerStatefulWidget {
   const BackupSettingsScreen({super.key});
 
   @override
-  State<BackupSettingsScreen> createState() => _BackupSettingsScreenState();
+  ConsumerState<BackupSettingsScreen> createState() => _BackupSettingsScreenState();
 }
 
-class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
+class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
   bool _autoBackupEnabled = false;
   String _backupFrequency = 'daily'; // daily, weekly, monthly
   List<File> _localBackups = [];
@@ -110,7 +114,10 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       if (result != null) {
         setState(() => _isLoading = true);
         final path = result.files.single.path!;
-        await BackupService.restoreBackup(path);
+        
+        // Get database instance to close it
+        final db = ref.read(databaseProvider);
+        await BackupService.restoreBackup(path, db);
         
         // Show success and restart dialog
         if (mounted) {
@@ -123,9 +130,9 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               actions: [
                 TextButton(
                   onPressed: () {
-                     exit(0);
+                    SystemNavigator.pop();
                   },
-                  child: const Text('Restart App'),
+                  child: const Text('Close App'),
                 ),
               ],
             ),

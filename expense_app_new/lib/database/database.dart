@@ -180,6 +180,8 @@ class AppDatabase extends _$AppDatabase {
           // Indexes are added via customConstraints, so we might need to recreate tables or just add indices manually
           // Drift usually handles index creation if they are part of createAll, but for migration we need to add them.
           // Since we added customConstraints, we should run custom SQL to create indexes.
+          await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)');
+          await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_category ON expenses(user_id, category_id)');
           await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)');
         }
 

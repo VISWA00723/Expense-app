@@ -50,12 +50,29 @@ void callbackDispatcher() {
   });
 }
 
+/// Router notifier to handle auth state changes
+class RouterNotifier extends ChangeNotifier {
+  final Ref _ref;
+
+  RouterNotifier(this._ref) {
+    _ref.listen(bootstrapStateProvider, (_, __) => notifyListeners());
+    _ref.listen(isAuthenticatedProvider, (_, __) => notifyListeners());
+  }
+}
+
+final routerNotifierProvider = Provider<RouterNotifier>((ref) {
+  return RouterNotifier(ref);
+});
+
 final goRouterProvider = Provider<GoRouter>((ref) {
+  final notifier = ref.watch(routerNotifierProvider);
+  
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: notifier,
     redirect: (context, state) {
       // Check bootstrap state
-      final bootstrapState = ref.watch(bootstrapStateProvider);
+      final bootstrapState = ref.read(bootstrapStateProvider);
       
       // If not initialized, show splash
       if (bootstrapState != BootstrapState.complete) {
@@ -63,7 +80,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       }
 
       // Check if user is authenticated
-      final isAuthenticated = ref.watch(isAuthenticatedProvider);
+      final isAuthenticated = ref.read(isAuthenticatedProvider);
       final isLoggingIn = state.matchedLocation == '/login';
       final isSigningUp = state.matchedLocation == '/signup';
       final isSettingUp = state.matchedLocation == '/profile-setup';
