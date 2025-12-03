@@ -30,9 +30,9 @@ final spendingByCategoryProvider = StreamProvider.autoDispose.family<Map<String,
 });
 
 // Spending by category with IDs for color assignment
-final spendingByCategoryWithIdProvider = StreamProvider.autoDispose.family<List<CategorySpending>, (int, String?, String?)>((ref, params) {
+final spendingByCategoryWithIdProvider = StreamProvider.autoDispose.family<List<CategorySpending>, (int, String?, String?, int?)>((ref, params) {
   final db = ref.watch(databaseProvider);
-  return db.watchSpendingByCategoryWithId(params.$1, startDate: params.$2, endDate: params.$3).distinct();
+  return db.watchSpendingByCategoryWithId(params.$1, startDate: params.$2, endDate: params.$3, categoryId: params.$4).distinct();
 });
 
 // Expenses by month for user

@@ -343,7 +343,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Get spending by category with IDs for color assignment
-  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId, {String? startDate, String? endDate}) {
+  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId, {String? startDate, String? endDate, int? categoryId}) {
     String query = '''SELECT ec.id, ec.name, SUM(e.amount) as total FROM expenses e 
          JOIN expense_categories ec ON e.category_id = ec.id 
          WHERE e.user_id = ?''';
@@ -357,6 +357,10 @@ class AppDatabase extends _$AppDatabase {
     if (endDate != null) {
       query += ' AND e.date <= ?';
       variables.add(Variable.withString(endDate));
+    }
+    if (categoryId != null) {
+      query += ' AND e.category_id = ?';
+      variables.add(Variable.withInt(categoryId));
     }
 
     query += ' GROUP BY ec.id, ec.name';

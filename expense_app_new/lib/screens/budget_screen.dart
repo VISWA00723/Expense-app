@@ -88,7 +88,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     final nextMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 1);
     final endDate = DateFormat('yyyy-MM-dd').format(nextMonth.subtract(const Duration(days: 1)));
     
-    final spendingAsync = ref.watch(spendingByCategoryWithIdProvider((user.id, startDate, endDate)));
+    final spendingAsync = ref.watch(spendingByCategoryWithIdProvider((user.id, startDate, endDate, null)));
 
     return Scaffold(
       appBar: AppBar(

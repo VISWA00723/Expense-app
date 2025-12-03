@@ -269,7 +269,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: ExpensePieChart(userId: userId),
+              child: ExpensePieChart(userId: userId, categoryId: _selectedCategoryId),
             ),
           ),
 

@@ -34,6 +34,71 @@ class _AddCategoryScreenState extends ConsumerState<AddCategoryScreen> {
     '🏷️', '💸', '💼', '🍷', '☕', '🍕', '⛽', '💡'
   ];
 
+  final List<Color> _availableColors = [
+    Colors.red, Colors.pink, Colors.purple, Colors.deepPurple,
+    Colors.indigo, Colors.blue, Colors.lightBlue, Colors.cyan,
+    Colors.teal, Colors.green, Colors.lightGreen, Colors.lime,
+    Colors.yellow, Colors.amber, Colors.orange, Colors.deepOrange,
+    Colors.brown, Colors.grey, Colors.blueGrey, Colors.black,
+  ];
+
+  void _showColorPickerDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Pick a Custom Color',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
+                child: ColorPicker(
+                  pickerColor: _selectedColor,
+                  onColorChanged: (color) => setState(() => _selectedColor = color),
+                  enableAlpha: false,
+                  displayThumbColor: true,
+                  paletteType: PaletteType.hsvWithHue,
+                  labelTypes: const [],
+                  pickerAreaHeightPercent: 0.7,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Select Color'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -218,20 +283,55 @@ class _AddCategoryScreenState extends ConsumerState<AddCategoryScreen> {
                   border: Border.all(color: Colors.grey.withOpacity(0.2)),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.all(8),
-                child: ColorPicker(
-                  pickerColor: _selectedColor,
-                  onColorChanged: (color) => setState(() => _selectedColor = color),
-                  colorPickerWidth: 300,
-                  pickerAreaHeightPercent: 0.7,
-                  enableAlpha: false,
-                  displayThumbColor: true,
-                  paletteType: PaletteType.hsvWithHue,
-                  labelTypes: const [],
-                  pickerAreaBorderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    topRight: Radius.circular(10),
-                  ),
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 6,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemCount: _availableColors.length + 1, // +1 for Custom
+                      itemBuilder: (context, index) {
+                        if (index == _availableColors.length) {
+                          // Custom Color Button
+                          return InkWell(
+                            onTap: _showColorPickerDialog,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Theme.of(context).colorScheme.primary),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
+                            ),
+                          );
+                        }
+                        
+                        final color = _availableColors[index];
+                        final isSelected = _selectedColor.value == color.value;
+                        
+                        return InkWell(
+                          onTap: () => setState(() => _selectedColor = color),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                              boxShadow: isSelected ? [
+                                BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, spreadRadius: 1)
+                              ] : null,
+                            ),
+                            child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),

@@ -8,7 +8,8 @@ import 'package:expense_app_new/database/database.dart';
 
 class ExpensePieChart extends ConsumerStatefulWidget {
   final int userId;
-  const ExpensePieChart({super.key, required this.userId});
+  final int? categoryId;
+  const ExpensePieChart({super.key, required this.userId, this.categoryId});
 
   @override
   ConsumerState<ExpensePieChart> createState() => _ExpensePieChartState();
@@ -47,7 +48,7 @@ class _ExpensePieChartState extends ConsumerState<ExpensePieChart> {
     // All Time: startDate = null, endDate = null
 
     final spendingAsync = ref.watch(
-      spendingByCategoryWithIdProvider((widget.userId, startDate, endDate)),
+      spendingByCategoryWithIdProvider((widget.userId, startDate, endDate, widget.categoryId)),
     );
 
     return Column(
