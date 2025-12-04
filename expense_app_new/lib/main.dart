@@ -245,7 +245,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final user = ref.read(currentUserProvider);
       if (user != null) {
-        print('🔄 [App] Resumed from background, updating streak...');
+
         ref.read(gamificationServiceProvider).updateStreak(user.id);
       }
     }

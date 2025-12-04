@@ -210,7 +210,7 @@ class _EnvelopeListItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categoriesAsync = ref.watch(categoriesStreamProvider(userId));
-    final balanceFuture = ref.read(budgetingServiceProvider).getEnvelopeBalance(userId, envelope.categoryId, month, year);
+    final balanceAsync = ref.watch(envelopeBalanceProvider((userId, envelope.categoryId, month, year)));
 
     return categoriesAsync.when(
       data: (categories) {
@@ -284,11 +284,8 @@ class _EnvelopeListItem extends ConsumerWidget {
                       const SizedBox(height: 8),
                       
                       // Progress Bar
-                      FutureBuilder<double>(
-                        future: balanceFuture,
-                        builder: (context, snapshot) {
-                           if (!snapshot.hasData) return const LinearProgressIndicator(minHeight: 6);
-                           final balance = snapshot.data!;
+                      balanceAsync.when(
+                        data: (balance) {
                            final spent = envelope.amount - balance;
                            final progress = envelope.amount > 0 ? (spent / envelope.amount).clamp(0.0, 1.0) : 0.0;
                            final isOverBudget = balance < 0;
@@ -325,7 +322,9 @@ class _EnvelopeListItem extends ConsumerWidget {
                                ),
                              ],
                            );
-                        }
+                        },
+                        loading: () => const LinearProgressIndicator(minHeight: 6),
+                        error: (_, __) => const SizedBox(),
                       ),
                     ],
                   ),

@@ -330,24 +330,33 @@ class _SalaryOverviewCard extends ConsumerWidget {
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isSpendingMore ? Icons.trending_up : Icons.trending_down,
-                                color: isSpendingMore ? Colors.redAccent : Colors.greenAccent,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${((trendDiff / (prevSpent == 0 ? 1 : prevSpent)) * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
+                          child: prevSpent == 0 
+                              ? const Text(
+                                  'New',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                )
+                              : Row(
+                                  children: [
+                                    Icon(
+                                      isSpendingMore ? Icons.trending_up : Icons.trending_down,
+                                      color: isSpendingMore ? Colors.redAccent : Colors.greenAccent,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${((trendDiff / prevSpent) * 100).abs().toStringAsFixed(0)}%',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
                       ],
                     ),

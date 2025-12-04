@@ -623,19 +623,26 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           await RecentPayeesService.addPayee(vpa);
           _loadRecentPayees();
 
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Payment Successful! Analyzing expense...')),
-            );
-            
+            if (!mounted) return;
             // 🧠 Smart Categorization
             await AutoCategorizer.initialize();
+            
+            if (!mounted) return;
             final detectedCategoryName = AutoCategorizer.detectCategory(note);
             
             // Find category ID
             final user = ref.read(currentUserProvider);
             if (user != null) {
               final categories = await ref.read(databaseProvider).getUserCategories(user.id);
+              
+              if (!mounted) return;
+              
+              if (categories.isEmpty) {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No categories found. Please create one first.')),
+                );
+                return;
+              }
               
               // Try to find matching category
               final category = categories.firstWhere(
@@ -658,7 +665,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               // Save
               await _saveExpense();
             }
-          }
         } else if (status == 'FAILURE' || status == 'FAILED') {
            if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -810,7 +816,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         DropdownMenuItem(value: 'JPY', child: Text('JPY (¥)')),
                         DropdownMenuItem(value: 'CNY', child: Text('CNY (¥)')),
                       ],
-                      onChanged: (val) => setState(() => _selectedCurrency = val!),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedCurrency = val!;
+                          if (_selectedCurrency != 'INR') {
+                            _paymentMethod = 'Cash';
+                          }
+                        });
+                      },
                     ),
                   ),
                   Expanded(
@@ -1166,22 +1179,22 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 child: FilledButton.icon(
                   onPressed: _isLoading 
                       ? null 
-                      : (_paymentMethod == 'UPI' ? _payWithUpi : _saveExpense),
+                      : ((_selectedCurrency == 'INR' && _paymentMethod == 'UPI') ? _payWithUpi : _saveExpense),
                   icon: _isLoading 
                       ? const SizedBox(
                           width: 24, 
                           height: 24, 
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                         )
-                      : Icon(_paymentMethod == 'UPI' ? Icons.payment : Icons.check),
+                      : Icon((_selectedCurrency == 'INR' && _paymentMethod == 'UPI') ? Icons.payment : Icons.check),
                   label: Text(
                     _isLoading 
                         ? 'Processing...' 
-                        : (_paymentMethod == 'UPI' ? 'Pay & Save' : 'Save Expense'),
+                        : ((_selectedCurrency == 'INR' && _paymentMethod == 'UPI') ? 'Pay & Save' : 'Save Expense'),
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: _paymentMethod == 'UPI' 
+                    backgroundColor: (_selectedCurrency == 'INR' && _paymentMethod == 'UPI') 
                         ? Theme.of(context).colorScheme.primary 
                         : Theme.of(context).colorScheme.tertiary,
                     foregroundColor: Colors.white,

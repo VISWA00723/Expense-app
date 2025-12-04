@@ -14,8 +14,8 @@ class BudgetingService {
     final existing = await _db.watchEnvelopes(userId, month, year).first;
     if (existing.isNotEmpty) return;
 
-    // Get all expense categories
-    final categories = await _db.select(_db.expenseCategories).get();
+    // Get all expense categories for this user
+    final categories = await (_db.select(_db.expenseCategories)..where((c) => c.userId.equals(userId))).get();
 
     // Create an envelope for each category with 0 amount
     await _db.batch((batch) {
@@ -54,10 +54,17 @@ class BudgetingService {
 
   // Move money between envelopes
   Future<void> transferBetweenEnvelopes(int fromEnvelopeId, int toEnvelopeId, double amount) async {
-    final fromEnvelope = await (_db.select(_db.envelopes)..where((t) => t.id.equals(fromEnvelopeId))).getSingle();
-    final toEnvelope = await (_db.select(_db.envelopes)..where((t) => t.id.equals(toEnvelopeId))).getSingle();
+    if (amount <= 0) throw Exception('Transfer amount must be positive');
 
     await _db.transaction(() async {
+      // Re-fetch envelopes inside transaction to ensure fresh data
+      final fromEnvelope = await (_db.select(_db.envelopes)..where((t) => t.id.equals(fromEnvelopeId))).getSingle();
+      final toEnvelope = await (_db.select(_db.envelopes)..where((t) => t.id.equals(toEnvelopeId))).getSingle();
+
+      if (fromEnvelope.amount < amount) {
+        throw Exception('Insufficient funds in source envelope');
+      }
+
       // Deduct from source
       await _db.updateEnvelope(fromEnvelope.copyWith(
         amount: fromEnvelope.amount - amount,
@@ -100,9 +107,33 @@ class BudgetingService {
 
     return allocated - spent;
   }
+  // Watch Envelope Balance (Allocated - Spent)
+  Stream<double> watchEnvelopeBalance(int userId, int categoryId, int month, int year) {
+    final monthStr = month.toString().padLeft(2, '0');
+    final datePattern = '$year-$monthStr%';
+    
+    return _db.customSelect(
+      'SELECT '
+      '(COALESCE((SELECT amount FROM envelopes WHERE user_id = ?1 AND category_id = ?2 AND month = ?3 AND year = ?4), 0.0) - '
+      'COALESCE((SELECT SUM(amount) FROM expenses WHERE user_id = ?1 AND category_id = ?2 AND date LIKE ?5), 0.0)) as balance',
+      variables: [
+        Variable.withInt(userId),
+        Variable.withInt(categoryId),
+        Variable.withInt(month),
+        Variable.withInt(year),
+        Variable.withString(datePattern)
+      ],
+      readsFrom: {_db.envelopes, _db.expenses}
+    ).watchSingle().map((row) => row.read<double>('balance'));
+  }
 }
 
 final budgetingServiceProvider = Provider<BudgetingService>((ref) {
   final db = ref.watch(databaseProvider);
   return BudgetingService(db);
+});
+
+final envelopeBalanceProvider = StreamProvider.family<double, (int, int, int, int)>((ref, params) {
+  final (userId, categoryId, month, year) = params;
+  return ref.watch(budgetingServiceProvider).watchEnvelopeBalance(userId, categoryId, month, year);
 });

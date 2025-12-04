@@ -65,12 +65,32 @@ class _NetWorthScreenState extends ConsumerState<NetWorthScreen> {
   }
 
   Widget _buildNetWorthCard(AsyncValue<List<Asset>> assetsAsync, AsyncValue<List<Liability>> liabilitiesAsync) {
-    double totalAssets = 0;
-    double totalLiabilities = 0;
+    if (assetsAsync.isLoading || liabilitiesAsync.isLoading) {
+      return const Card(
+        elevation: 4,
+        child: SizedBox(
+          height: 200,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
-    assetsAsync.whenData((assets) => totalAssets = assets.fold(0, (sum, item) => sum + item.value));
-    liabilitiesAsync.whenData((liabilities) => totalLiabilities = liabilities.fold(0, (sum, item) => sum + item.remainingAmount));
+    if (assetsAsync.hasError || liabilitiesAsync.hasError) {
+      return Card(
+        elevation: 4,
+        color: Theme.of(context).colorScheme.errorContainer,
+        child: const SizedBox(
+          height: 200,
+          child: Center(child: Text('Error loading data')),
+        ),
+      );
+    }
 
+    final assets = assetsAsync.valueOrNull ?? [];
+    final liabilities = liabilitiesAsync.valueOrNull ?? [];
+
+    final totalAssets = assets.fold(0.0, (sum, item) => sum + item.value);
+    final totalLiabilities = liabilities.fold(0.0, (sum, item) => sum + item.remainingAmount);
     final netWorth = totalAssets - totalLiabilities;
 
     return Card(
@@ -244,74 +264,102 @@ class _NetWorthScreenState extends ConsumerState<NetWorthScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(asset == null ? 'Add Asset' : 'Edit Asset'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Name (e.g., HDFC Bank)'),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: type,
-              items: const [
-                DropdownMenuItem(value: 'bank', child: Text('Bank Account')),
-                DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                DropdownMenuItem(value: 'stock', child: Text('Stocks/MF')),
-                DropdownMenuItem(value: 'real_estate', child: Text('Real Estate')),
-                DropdownMenuItem(value: 'gold', child: Text('Gold')),
-                DropdownMenuItem(value: 'other', child: Text('Other')),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(asset == null ? 'Add Asset' : 'Edit Asset'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Name (e.g., HDFC Bank)'),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: type,
+                  items: const [
+                    DropdownMenuItem(value: 'bank', child: Text('Bank Account')),
+                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    DropdownMenuItem(value: 'stock', child: Text('Stocks/MF')),
+                    DropdownMenuItem(value: 'real_estate', child: Text('Real Estate')),
+                    DropdownMenuItem(value: 'gold', child: Text('Gold')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (val) => setState(() => type = val!),
+                  decoration: const InputDecoration(labelText: 'Type'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: valueController,
+                  decoration: const InputDecoration(labelText: 'Value'),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
               ],
-              onChanged: (val) => type = val!,
-              decoration: const InputDecoration(labelText: 'Type'),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: valueController,
-              decoration: const InputDecoration(labelText: 'Value'),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (nameController.text.isEmpty || valueController.text.isEmpty) return;
-              
-              final db = ref.read(databaseProvider);
-              final now = DateTime.now().toIso8601String();
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final valueStr = valueController.text.trim();
 
-              if (asset == null) {
-                await db.addAsset(AssetsCompanion(
-                  userId: drift.Value(userId),
-                  name: drift.Value(nameController.text),
-                  type: drift.Value(type),
-                  value: drift.Value(double.parse(valueController.text)),
-                  updatedAt: drift.Value(now),
-                ));
-              } else {
-                await db.updateAsset(asset.copyWith(
-                  name: nameController.text,
-                  type: type,
-                  value: double.parse(valueController.text),
-                  updatedAt: now,
-                ));
-              }
-              
-              // Update History Snapshot
-              _updateHistorySnapshot(userId);
-              
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+                  if (name.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a name')),
+                    );
+                    return;
+                  }
+
+                  final value = double.tryParse(valueStr);
+                  if (value == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a valid number')),
+                    );
+                    return;
+                  }
+
+                  try {
+                    final db = ref.read(databaseProvider);
+                    final now = DateTime.now().toIso8601String();
+
+                    if (asset == null) {
+                      await db.addAsset(AssetsCompanion(
+                        userId: drift.Value(userId),
+                        name: drift.Value(name),
+                        type: drift.Value(type),
+                        value: drift.Value(value),
+                        updatedAt: drift.Value(now),
+                      ));
+                    } else {
+                      await db.updateAsset(asset.copyWith(
+                        name: name,
+                        type: type,
+                        value: value,
+                        updatedAt: now,
+                      ));
+                    }
+                    
+                    // Update History Snapshot
+                    await _updateHistorySnapshot(userId);
+                    
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error saving asset: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -324,104 +372,139 @@ class _NetWorthScreenState extends ConsumerState<NetWorthScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(liability == null ? 'Add Liability' : 'Edit Liability'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Name (e.g., Home Loan)'),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: type,
-                items: const [
-                  DropdownMenuItem(value: 'loan', child: Text('Personal Loan')),
-                  DropdownMenuItem(value: 'credit_card', child: Text('Credit Card')),
-                  DropdownMenuItem(value: 'mortgage', child: Text('Mortgage')),
-                  DropdownMenuItem(value: 'other', child: Text('Other')),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(liability == null ? 'Add Liability' : 'Edit Liability'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Name (e.g., Home Loan)'),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: type,
+                    items: const [
+                      DropdownMenuItem(value: 'loan', child: Text('Personal Loan')),
+                      DropdownMenuItem(value: 'credit_card', child: Text('Credit Card')),
+                      DropdownMenuItem(value: 'mortgage', child: Text('Mortgage')),
+                      DropdownMenuItem(value: 'other', child: Text('Other')),
+                    ],
+                    onChanged: (val) => setState(() => type = val!),
+                    decoration: const InputDecoration(labelText: 'Type'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: totalController,
+                    decoration: const InputDecoration(labelText: 'Total Amount'),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: remainingController,
+                    decoration: const InputDecoration(labelText: 'Remaining Amount'),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
                 ],
-                onChanged: (val) => type = val!,
-                decoration: const InputDecoration(labelText: 'Type'),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: totalController,
-                decoration: const InputDecoration(labelText: 'Total Amount'),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: remainingController,
-                decoration: const InputDecoration(labelText: 'Remaining Amount'),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              FilledButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final totalStr = totalController.text.trim();
+                  final remainingStr = remainingController.text.trim();
+
+                  if (name.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a name')),
+                    );
+                    return;
+                  }
+
+                  final remaining = double.tryParse(remainingStr);
+                  if (remaining == null || remaining < 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a valid remaining amount')),
+                    );
+                    return;
+                  }
+
+                  final total = double.tryParse(totalStr) ?? 0.0;
+
+                  try {
+                    final db = ref.read(databaseProvider);
+                    final now = DateTime.now().toIso8601String();
+
+                    if (liability == null) {
+                      await db.addLiability(LiabilitiesCompanion(
+                        userId: drift.Value(userId),
+                        name: drift.Value(name),
+                        type: drift.Value(type),
+                        totalAmount: drift.Value(total),
+                        remainingAmount: drift.Value(remaining),
+                        updatedAt: drift.Value(now),
+                      ));
+                    } else {
+                      await db.updateLiability(liability.copyWith(
+                        name: name,
+                        type: type,
+                        totalAmount: total,
+                        remainingAmount: remaining,
+                        updatedAt: now,
+                      ));
+                    }
+
+                    // Update History Snapshot
+                    await _updateHistorySnapshot(userId);
+
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error saving liability: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Save'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (nameController.text.isEmpty || remainingController.text.isEmpty) return;
-              
-              final db = ref.read(databaseProvider);
-              final now = DateTime.now().toIso8601String();
-
-              if (liability == null) {
-                await db.addLiability(LiabilitiesCompanion(
-                  userId: drift.Value(userId),
-                  name: drift.Value(nameController.text),
-                  type: drift.Value(type),
-                  totalAmount: drift.Value(double.tryParse(totalController.text) ?? 0),
-                  remainingAmount: drift.Value(double.parse(remainingController.text)),
-                  updatedAt: drift.Value(now),
-                ));
-              } else {
-                await db.updateLiability(liability.copyWith(
-                  name: nameController.text,
-                  type: type,
-                  totalAmount: double.tryParse(totalController.text) ?? 0,
-                  remainingAmount: double.parse(remainingController.text),
-                  updatedAt: now,
-                ));
-              }
-
-              // Update History Snapshot
-              _updateHistorySnapshot(userId);
-
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
   Future<void> _updateHistorySnapshot(int userId) async {
-    final db = ref.read(databaseProvider);
-    final assets = await db.getAssets(userId);
-    final liabilities = await db.getLiabilities(userId);
+    try {
+      final db = ref.read(databaseProvider);
+      final assets = await db.getAssets(userId);
+      final liabilities = await db.getLiabilities(userId);
 
-    double totalAssets = assets.fold(0, (sum, item) => sum + item.value);
-    double totalLiabilities = liabilities.fold(0, (sum, item) => sum + item.remainingAmount);
+      double totalAssets = assets.fold(0, (sum, item) => sum + item.value);
+      double totalLiabilities = liabilities.fold(0, (sum, item) => sum + item.remainingAmount);
 
-    await db.addNetWorthSnapshot(NetWorthHistoryCompanion(
-      userId: drift.Value(userId),
-      totalAssets: drift.Value(totalAssets),
-      totalLiabilities: drift.Value(totalLiabilities),
-      netWorth: drift.Value(totalAssets - totalLiabilities),
-      date: drift.Value(DateTime.now().toIso8601String()),
-    ));
-    
-    ref.invalidate(netWorthHistoryProvider);
-    ref.invalidate(assetsProvider);
-    ref.invalidate(liabilitiesProvider);
+      await db.addNetWorthSnapshot(NetWorthHistoryCompanion(
+        userId: drift.Value(userId),
+        totalAssets: drift.Value(totalAssets),
+        totalLiabilities: drift.Value(totalLiabilities),
+        netWorth: drift.Value(totalAssets - totalLiabilities),
+        date: drift.Value(DateTime.now().toIso8601String()),
+      ));
+    } catch (e, stackTrace) {
+      debugPrint('Error updating net worth snapshot: $e\n$stackTrace');
+    } finally {
+      ref.invalidate(netWorthHistoryProvider);
+      ref.invalidate(assetsProvider);
+      ref.invalidate(liabilitiesProvider);
+    }
   }
 }

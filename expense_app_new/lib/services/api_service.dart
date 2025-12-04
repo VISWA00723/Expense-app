@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:expense_app_new/models/expense_model.dart';
 
 class AIResponse {
@@ -290,3 +291,7 @@ class ApiService {
     }
   }
 }
+
+final apiServiceProvider = Provider<ApiService>((ref) {
+  return ApiService();
+});

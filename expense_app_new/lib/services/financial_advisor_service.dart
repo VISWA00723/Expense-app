@@ -101,6 +101,6 @@ class FinancialAdvisorService {
 
 final financialAdvisorServiceProvider = Provider<FinancialAdvisorService>((ref) {
   final db = ref.watch(databaseProvider);
-  final apiService = ApiService(); // Create new instance or provide via another provider
+  final apiService = ref.watch(apiServiceProvider);
   return FinancialAdvisorService(db, apiService);
 });

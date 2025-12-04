@@ -114,7 +114,8 @@ final monthlyIncomeProvider = StreamProvider.autoDispose.family<double, (int, in
   
   return (db.select(db.incomes)..where((t) => t.userId.equals(userId))).watch().map((incomes) {
     return incomes.where((i) {
-      final date = DateTime.parse(i.date);
+      final date = DateTime.tryParse(i.date);
+      if (date == null) return false;
       return date.month == month && date.year == year;
     }).fold(0.0, (sum, item) => sum + item.amount);
   });
