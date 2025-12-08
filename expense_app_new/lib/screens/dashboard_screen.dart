@@ -13,6 +13,9 @@ import 'package:expense_app_new/widgets/notification_permission_dialog.dart';
 import 'package:expense_app_new/services/gamification_service.dart';
 import 'package:expense_app_new/services/financial_advisor_service.dart';
 import 'package:expense_app_new/widgets/app_bottom_bar.dart';
+import 'package:expense_app_new/services/recurring_expense_service.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:flutter/services.dart';
 
 import 'package:expense_app_new/widgets/expense_pie_chart.dart';
 
@@ -35,6 +38,9 @@ class DashboardScreen extends ConsumerWidget {
     // Show notification permission dialog on first launch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationPermissionDialog.showIfNeeded(context);
+      
+      // Check for due recurring expenses
+      ref.read(recurringExpenseServiceProvider).checkAndCreateDueExpenses(user.id);
     });
 
     // Check if profile setup is complete
@@ -209,25 +215,67 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _SalaryOverviewCard extends ConsumerWidget {
+class _SalaryOverviewCard extends ConsumerStatefulWidget {
   final User user;
   const _SalaryOverviewCard({required this.user});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SalaryOverviewCard> createState() => _SalaryOverviewCardState();
+}
+
+class _SalaryOverviewCardState extends ConsumerState<_SalaryOverviewCard> {
+  bool _isBudgetVisible = true;
+  final LocalAuthentication auth = LocalAuthentication();
+
+  Future<void> _toggleBudgetVisibility() async {
+    if (_isBudgetVisible) {
+      // Hide immediately
+      setState(() => _isBudgetVisible = false);
+    } else {
+      // Authenticate to show
+      try {
+        final bool canAuthenticateWithBiometrics = await auth.canCheckBiometrics;
+        final bool canAuthenticate = canAuthenticateWithBiometrics || await auth.isDeviceSupported();
+
+        if (!canAuthenticate) {
+          // Fallback if no auth available
+          setState(() => _isBudgetVisible = true);
+          return;
+        }
+
+        final bool didAuthenticate = await auth.authenticate(
+          localizedReason: 'Please authenticate to view budget details',
+          options: const AuthenticationOptions(
+            stickyAuth: true,
+            biometricOnly: false,
+          ),
+        );
+
+        if (didAuthenticate) {
+          setState(() => _isBudgetVisible = true);
+        }
+      } on PlatformException catch (e) {
+        print('Auth Error: $e');
+        // Optional: Show error snackbar
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final now = DateTime.now();
     final currentMonth = DateFormat('yyyy-MM').format(now);
     final prevMonthDate = DateTime(now.year, now.month - 1);
     final prevMonth = DateFormat('yyyy-MM').format(prevMonthDate);
 
-    final currentMonthTotalAsync = ref.watch(currentMonthTotalProvider((user.id, currentMonth)));
-    final prevMonthTotalAsync = ref.watch(currentMonthTotalProvider((user.id, prevMonth)));
+    final currentMonthTotalAsync = ref.watch(currentMonthTotalProvider((widget.user.id, currentMonth)));
+    final prevMonthTotalAsync = ref.watch(currentMonthTotalProvider((widget.user.id, prevMonth)));
 
     final currentSpent = currentMonthTotalAsync.value ?? 0.0;
     final prevSpent = prevMonthTotalAsync.value ?? 0.0;
-    final remaining = (user.monthlySalary) - currentSpent;
+    final remaining = (widget.user.monthlySalary) - currentSpent;
     
-    final spendPercentage = (currentSpent / user.monthlySalary).clamp(0.0, 1.0);
+    final spendPercentage = (currentSpent / widget.user.monthlySalary).clamp(0.0, 1.0);
     
     // Threshold Colors
     Color statusColor;
@@ -303,12 +351,13 @@ class _SalaryOverviewCard extends ConsumerWidget {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Monthly Budget',
+                              'Remaining Budget',
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: Colors.white.withOpacity(0.8),
                                     fontWeight: FontWeight.w500,
@@ -316,7 +365,9 @@ class _SalaryOverviewCard extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '₹${(user.monthlySalary).toStringAsFixed(2)}',
+                              _isBudgetVisible 
+                                  ? '₹${remaining.toStringAsFixed(2)}' 
+                                  : '••••••',
                               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -324,39 +375,52 @@ class _SalaryOverviewCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: prevSpent == 0 
-                              ? const Text(
-                                  'New',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                )
-                              : Row(
-                                  children: [
-                                    Icon(
-                                      isSpendingMore ? Icons.trending_up : Icons.trending_down,
-                                      color: isSpendingMore ? Colors.redAccent : Colors.greenAccent,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${((trendDiff / prevSpent) * 100).abs().toStringAsFixed(0)}%',
-                                      style: const TextStyle(
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: _toggleBudgetVisibility,
+                              icon: Icon(
+                                _isBudgetVisible ? Icons.visibility : Icons.visibility_off,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                              tooltip: _isBudgetVisible ? 'Hide Balance' : 'Show Balance',
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: prevSpent == 0 
+                                  ? const Text(
+                                      'New',
+                                      style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
                                       ),
+                                    )
+                                  : Row(
+                                      children: [
+                                        Icon(
+                                          isSpendingMore ? Icons.trending_up : Icons.trending_down,
+                                          color: isSpendingMore ? Colors.redAccent : Colors.greenAccent,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${((trendDiff / prevSpent) * 100).abs().toStringAsFixed(0)}%',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -432,20 +496,36 @@ class _SalaryOverviewCard extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '₹${currentSpent.toStringAsFixed(2)}',
+                              _isBudgetVisible 
+                                  ? '₹${currentSpent.toStringAsFixed(2)}' 
+                                  : '••••',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
                             ),
-                            Text(
-                              '₹${remaining.toStringAsFixed(2)} left',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Monthly Budget',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                Text(
+                                  _isBudgetVisible 
+                                      ? '₹${widget.user.monthlySalary.toStringAsFixed(2)}' 
+                                      : '••••',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -535,7 +615,11 @@ class _RecentExpenses extends ConsumerWidget {
               final yesterday = today.subtract(const Duration(days: 1));
 
               for (final expense in expenses) {
-                final date = DateTime.parse(expense.date);
+                final date = DateTime.tryParse(expense.date);
+                if (date == null) {
+                  debugPrint('Error parsing date for expense ${expense.id}: ${expense.date}');
+                  continue;
+                }
                 final dateOnly = DateTime(date.year, date.month, date.day);
                 
                 String key;

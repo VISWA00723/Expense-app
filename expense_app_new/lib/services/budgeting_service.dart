@@ -101,7 +101,8 @@ class BudgetingService {
     ).get();
 
     final spent = expenses.where((e) {
-      final date = DateTime.parse(e.date);
+      final date = DateTime.tryParse(e.date);
+      if (date == null) return false;
       return date.month == month && date.year == year;
     }).fold(0.0, (sum, item) => sum + item.amount);
 

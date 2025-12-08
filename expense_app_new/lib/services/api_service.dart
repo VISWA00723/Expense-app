@@ -166,7 +166,7 @@ class ApiService {
           amount: calculatedTotal,
           category: structuredData['category'] ?? 'Uncategorized',
           notes: lineItems.join('\n'),
-          date: structuredData['date'] ?? DateTime.now().toIso8601String(),
+          date: (structuredData['date'] as String?)?.split('T')[0] ?? DateTime.now().toIso8601String().split('T')[0],
         );
         
         return AIResponse(

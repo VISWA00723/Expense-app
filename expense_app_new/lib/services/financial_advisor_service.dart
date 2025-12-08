@@ -77,7 +77,10 @@ class FinancialAdvisorService {
   Future<List<String>> analyzeMonthlyTrends(int userId) async {
     final now = DateTime.now();
     final currentMonth = DateFormat('yyyy-MM').format(now);
-    final lastMonth = DateFormat('yyyy-MM').format(DateTime(now.year, now.month - 1, 1));
+    
+    final lastMonthYear = now.month == 1 ? now.year - 1 : now.year;
+    final lastMonthMonth = now.month == 1 ? 12 : now.month - 1;
+    final lastMonth = DateFormat('yyyy-MM').format(DateTime(lastMonthYear, lastMonthMonth, 1));
 
     final currentTotal = await _db.getTotalByMonth(userId, currentMonth);
     final lastTotal = await _db.getTotalByMonth(userId, lastMonth);

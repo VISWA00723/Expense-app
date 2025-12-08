@@ -61,6 +61,18 @@ class RecurringExpenseService {
             await db.update(db.recurringExpenses).replace(recurring.copyWith(
               nextDueDate: DateFormat('yyyy-MM-dd').format(nextDate),
             ));
+
+            // Handle Liability Reduction (EMI)
+            if (recurring.liabilityId != null) {
+              final liability = await (db.select(db.liabilities)..where((t) => t.id.equals(recurring.liabilityId!))).getSingleOrNull();
+              if (liability != null) {
+                final newRemaining = liability.remainingAmount - recurring.amount;
+                await db.update(db.liabilities).replace(liability.copyWith(
+                  remainingAmount: newRemaining > 0 ? newRemaining : 0,
+                  updatedAt: DateTime.now().toIso8601String(),
+                ));
+              }
+            }
           }
         });
       }
@@ -103,6 +115,7 @@ class RecurringExpenseService {
     required String frequency,
     required DateTime nextDueDate,
     bool autoPay = false,
+    int? liabilityId,
   }) async {
     await db.into(db.recurringExpenses).insert(RecurringExpensesCompanion(
       userId: Value(userId),
@@ -113,7 +126,12 @@ class RecurringExpenseService {
       nextDueDate: Value(DateFormat('yyyy-MM-dd').format(nextDueDate)),
       autoPay: Value(autoPay),
       isActive: const Value(true),
+      liabilityId: Value(liabilityId),
     ));
+  }
+
+  Future<void> updateRecurringExpense(RecurringExpense expense) async {
+    await db.update(db.recurringExpenses).replace(expense);
   }
   
   Stream<List<RecurringExpense>> watchRecurringExpenses(int userId) {

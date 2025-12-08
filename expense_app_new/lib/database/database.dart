@@ -123,6 +123,7 @@ class RecurringExpenses extends Table {
   TextColumn get nextDueDate => text()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   BoolColumn get autoPay => boolean().withDefault(const Constant(false))();
+  IntColumn get liabilityId => integer().nullable().references(Liabilities, #id)();
 }
 
 class Assets extends Table {
@@ -185,7 +186,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -258,6 +259,11 @@ class AppDatabase extends _$AppDatabase {
           await m.create(envelopes);
           await m.create(envelopeTransfers);
         }
+
+        // Migration from v9 to v10: Add liabilityId to RecurringExpenses
+        if (from < 10) {
+          await m.addColumn(recurringExpenses, recurringExpenses.liabilityId);
+        }
       },
     );
   }
@@ -309,6 +315,22 @@ class AppDatabase extends _$AppDatabase {
   
   Future<bool> deleteCategory(int categoryId) =>
       (delete(expenseCategories)..where((tbl) => tbl.id.equals(categoryId))).go().then((val) => val > 0);
+
+  Future<List<int>> getRecentCategoryIds(int userId, {int limit = 5}) async {
+    final query = customSelect(
+      'SELECT category_id, MAX(created_at) as last_used '
+      'FROM expenses '
+      'WHERE user_id = ? '
+      'GROUP BY category_id '
+      'ORDER BY last_used DESC '
+      'LIMIT ?',
+      variables: [Variable.withInt(userId), Variable.withInt(limit)],
+      readsFrom: {expenses},
+    );
+    
+    final result = await query.get();
+    return result.map((row) => row.read<int>('category_id')).toList();
+  }
 
   // ===== EXPENSE OPERATIONS =====
   Future<int> insertExpense(ExpensesCompanion expense) {

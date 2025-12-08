@@ -114,134 +114,17 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
         maxChildSize: 0.9,
         expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Select Category',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      context.push('/add-category');
-                    },
-                    icon: const Icon(Icons.add_circle_outline),
-                    tooltip: 'Add Category',
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: GridView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.8,
-                ),
-                itemCount: categories.length + 1, // +1 for Add button
-                itemBuilder: (context, index) {
-                  if (index == categories.length) {
-                    // Add Category Button
-                    return InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.push('/add-category');
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.add, size: 28),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Add New',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  final category = categories[index];
-                  final isSelected = _selectedCategoryId == category.id;
-                  final customColor = category.color != null ? Color(category.color!) : null;
-                  
-                  return InkWell(
-                    onTap: () {
-                      setState(() => _selectedCategoryId = category.id);
-                      Navigator.pop(context);
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isSelected 
-                            ? (customColor?.withOpacity(0.2) ?? Theme.of(context).colorScheme.primaryContainer)
-                            : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(12),
-                        border: isSelected 
-                            ? Border.all(color: customColor ?? Theme.of(context).colorScheme.primary, width: 2)
-                            : (customColor != null ? Border.all(color: customColor.withOpacity(0.5)) : null),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (category.iconPath != null)
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                image: DecorationImage(
-                                  image: FileImage(File(category.iconPath!)),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            )
-                          else
-                            Text(
-                              category.icon,
-                              style: const TextStyle(fontSize: 28),
-                            ),
-                          const SizedBox(height: 8),
-                          Text(
-                            category.name,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: isSelected ? (customColor ?? Theme.of(context).colorScheme.primary) : null,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+        builder: (context, scrollController) => _CategorySelectionSheet(
+          categories: categories,
+          selectedCategoryId: _selectedCategoryId,
+          onCategorySelected: (id) {
+            setState(() => _selectedCategoryId = id);
+            Navigator.pop(context);
+          },
         ),
       ),
     );
@@ -257,6 +140,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     _receiptScanningService.dispose();
     super.dispose();
   }
+
 
 
 
@@ -1216,5 +1100,250 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   }
   bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _CategorySelectionSheet extends ConsumerStatefulWidget {
+  final List<ExpenseCategory> categories;
+  final int? selectedCategoryId;
+  final Function(int) onCategorySelected;
+
+  const _CategorySelectionSheet({
+    Key? key,
+    required this.categories,
+    required this.selectedCategoryId,
+    required this.onCategorySelected,
+  }) : super(key: key);
+
+  @override
+  ConsumerState<_CategorySelectionSheet> createState() => _CategorySelectionSheetState();
+}
+
+class _CategorySelectionSheetState extends ConsumerState<_CategorySelectionSheet> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+  List<int> _recentCategoryIds = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentCategories();
+  }
+
+  Future<void> _loadRecentCategories() async {
+    final user = ref.read(currentUserProvider);
+    if (user != null) {
+      final recentIds = await ref.read(databaseProvider).getRecentCategoryIds(user.id);
+      if (mounted) {
+        setState(() => _recentCategoryIds = recentIds);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Filter and Sort Categories
+    final filteredCategories = widget.categories.where((c) {
+      return c.name.toLowerCase().contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    // Sort: Recent first, then Alphabetical
+    filteredCategories.sort((a, b) {
+      final aIsRecent = _recentCategoryIds.contains(a.id);
+      final bIsRecent = _recentCategoryIds.contains(b.id);
+
+      if (aIsRecent && !bIsRecent) return -1;
+      if (!aIsRecent && bIsRecent) return 1;
+      
+      // If both are recent, sort by recency order (index in _recentCategoryIds)
+      if (aIsRecent && bIsRecent) {
+        return _recentCategoryIds.indexOf(a.id).compareTo(_recentCategoryIds.indexOf(b.id));
+      }
+
+      return a.name.compareTo(b.name);
+    });
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Select Category',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      context.push('/add-category');
+                    },
+                    icon: const Icon(Icons.add_circle_outline),
+                    tooltip: 'Add Category',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search categories...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: filteredCategories.isEmpty
+              ? Center(
+                  child: Text(
+                    'No categories found',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 0.8,
+                  ),
+                  itemCount: filteredCategories.length + 1, // +1 for Add button
+                  itemBuilder: (context, index) {
+                    if (index == filteredCategories.length) {
+                      // Add Category Button
+                      return InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.push('/add-category');
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.add, size: 28),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Add New',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    final category = filteredCategories[index];
+                    final isSelected = widget.selectedCategoryId == category.id;
+                    final isRecent = _recentCategoryIds.contains(category.id);
+                    final customColor = category.color != null ? Color(category.color!) : null;
+                    
+                    return InkWell(
+                      onTap: () => widget.onCategorySelected(category.id),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: isSelected 
+                                  ? (customColor?.withOpacity(0.2) ?? Theme.of(context).colorScheme.primaryContainer)
+                                  : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(12),
+                              border: isSelected 
+                                  ? Border.all(color: customColor ?? Theme.of(context).colorScheme.primary, width: 2)
+                                  : (customColor != null ? Border.all(color: customColor.withOpacity(0.5)) : null),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (category.iconPath != null)
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      image: DecorationImage(
+                                        image: FileImage(File(category.iconPath!)),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Text(
+                                    category.icon,
+                                    style: const TextStyle(fontSize: 28),
+                                  ),
+                                const SizedBox(height: 8),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: Text(
+                                    category.name,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                      color: isSelected ? (customColor ?? Theme.of(context).colorScheme.primary) : null,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isRecent && _searchQuery.isEmpty)
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.tertiaryContainer,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.history,
+                                  size: 10,
+                                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 }
