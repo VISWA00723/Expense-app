@@ -6,6 +6,9 @@ import 'package:expense_app_new/providers/auth_provider.dart';
 import 'package:expense_app_new/services/analytics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:expense_app_new/services/biometric_service.dart';
+import 'package:expense_app_new/database/database.dart';
+
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -18,12 +21,89 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _canCheckBiometrics = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometrics();
+  }
+
+  Future<void> _checkBiometrics() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isEnabled = prefs.getBool('biometric_enabled') ?? false;
+    if (!isEnabled) return;
+
+    final canCheck = await ref.read(biometricServiceProvider).isDeviceSupported();
+    if (mounted) {
+      setState(() => _canCheckBiometrics = canCheck);
+      if (canCheck) {
+        // Auto-trigger biometric prompt if enabled
+        _handleBiometricLogin();
+      }
+    }
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _completeLogin(User user, String loginMethod) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Save email for biometric login
+    await prefs.setString('last_email', user.email);
+
+    // Update global state
+    ref.read(currentUserProvider.notifier).state = user;
+    
+    // Log analytics
+    await AnalyticsService.logLogin(loginMethod);
+    
+    if (!mounted) return;
+
+    // Check if user has seen onboarding
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+    if (!hasSeenOnboarding) {
+      context.go('/onboarding');
+    } else {
+      context.go('/dashboard');
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    final authenticated = await ref.read(biometricServiceProvider).authenticate();
+    if (authenticated) {
+      final prefs = await SharedPreferences.getInstance();
+      final savedEmail = prefs.getString('last_email');
+      
+      if (savedEmail != null && savedEmail.isNotEmpty) {
+        setState(() => _isLoading = true);
+        final authService = ref.read(authServiceProvider);
+        final user = await authService.getUserByEmail(savedEmail);
+        
+        if (user != null) {
+          await _completeLogin(user, 'biometric');
+        } else {
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('User not found. Please login with password first.')),
+            );
+          }
+        }
+      } else {
+         if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please login with password once to enable biometric login.')),
+            );
+          }
+      }
+    }
   }
 
   Future<void> _handleLogin() async {
@@ -44,21 +124,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (!mounted) return;
 
-    if (success) {
-      ref.read(currentUserProvider.notifier).state = authService.currentUser;
-      await AnalyticsService.logLogin('email');
-      
-      if (!mounted) return;
-
-      // Check if user has seen onboarding
-      final prefs = await SharedPreferences.getInstance();
-      final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
-
-      if (!hasSeenOnboarding) {
-        context.go('/onboarding');
-      } else {
-        context.go('/dashboard');
-      }
+    if (success && authService.currentUser != null) {
+      await _completeLogin(authService.currentUser!, 'email');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid email or password')),
@@ -178,6 +245,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             : const Text('Sign In'),
                       ),
                     ),
+                    
+                    // Biometric Button
+                    if (_canCheckBiometrics) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _handleBiometricLogin,
+                          icon: const Icon(Icons.fingerprint),
+                          label: const Text('Login with Biometrics'),
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 16),
 
                     // Sign Up Link

@@ -41,7 +41,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
             prefixText: '₹ ',
             border: OutlineInputBorder(),
           ),
-          keyboardType: TextInputType.number,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
         ),
         actions: [
@@ -82,7 +82,13 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
 
     final categoriesAsync = ref.watch(userCategoriesProvider(user.id));
     final budgetsAsync = ref.watch(budgetsProvider((user.id, _monthStr)));
-    final spendingAsync = ref.watch(spendingByCategoryWithIdProvider(user.id));
+    
+    // Calculate start and end date for the selected month
+    final startDate = DateFormat('yyyy-MM-01').format(_selectedDate);
+    final nextMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 1);
+    final endDate = DateFormat('yyyy-MM-dd').format(nextMonth.subtract(const Duration(days: 1)));
+    
+    final spendingAsync = ref.watch(spendingByCategoryWithIdProvider((user.id, startDate, endDate, null)));
 
     return Scaffold(
       appBar: AppBar(

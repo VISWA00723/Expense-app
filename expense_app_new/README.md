@@ -41,6 +41,13 @@ Categories automatically adjust based on lifestyle:
 - Responsive layout
 - Consistent spacing and typography
 
+### 🌍 Multi-Currency Support
+- Support for major global currencies:
+  - INR (₹), USD ($), EUR (€), GBP (£)
+  - AUD (A$), CAD (C$), JPY (¥), CNY (¥)
+- Dynamic currency formatting in exports (PDF/CSV)
+- Intelligent receipt scanning for multiple currencies
+
 ## 🚀 Quick Start
 
 ### Prerequisites

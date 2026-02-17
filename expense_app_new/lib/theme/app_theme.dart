@@ -11,22 +11,23 @@ class AppTheme {
   static const Color darkSurfaceColor = Color(0xFF0F172A); // Slate 900
 
   // Premium Gradients
+  // Soft/Pastel Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)], // Soft Indigo to Violet
   );
 
   static const LinearGradient secondaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF7C3AED), Color(0xFFDB2777)],
+    colors: [Color(0xFFEC4899), Color(0xFFF472B6)], // Soft Pink
   );
 
   static const LinearGradient accentGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF0EA5E9), Color(0xFF6366F1)],
+    colors: [Color(0xFF38BDF8), Color(0xFF818CF8)], // Sky to Indigo
   );
 
   static const LinearGradient glassGradient = LinearGradient(
@@ -34,7 +35,7 @@ class AppTheme {
     end: Alignment.bottomRight,
     colors: [
       Color(0xCCFFFFFF),
-      Color(0x99FFFFFF),
+      Color(0x99F8FAFC),
     ],
   );
 
@@ -43,7 +44,7 @@ class AppTheme {
     end: Alignment.bottomRight,
     colors: [
       Color(0xCC1E293B),
-      Color(0x991E293B),
+      Color(0x99334155),
     ],
   );
 
@@ -130,6 +131,81 @@ class AppTheme {
       elevation: 0,
     ),
   );
+  
+  // Pink Theme (New Request)
+  static ThemeData lightThemePink = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFFE879F9), // Fuchsia 400
+      brightness: Brightness.light,
+      primary: const Color(0xFFD946EF), // Fuchsia 500
+      secondary: const Color(0xFFA855F7), // Purple 500
+      tertiary: const Color(0xFFEC4899), // Pink 500
+      surface: const Color(0xFFFDF4FF), // Fuchsia 50
+      surfaceContainerHighest: const Color(0xFFFAE8FF), // Fuchsia 100
+    ),
+    scaffoldBackgroundColor: const Color(0xFFFDF4FF),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: true,
+      titleTextStyle: TextStyle(
+        color: Color(0xFF701A75), // Fuchsia 900
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      iconTheme: IconThemeData(color: Color(0xFF701A75)),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: const Color(0xFFD946EF).withOpacity(0.1)),
+      ),
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 16),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: const Color(0xFFD946EF),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: const Color(0xFFD946EF).withOpacity(0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: const Color(0xFFD946EF).withOpacity(0.1)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: const BorderSide(color: Color(0xFFD946EF), width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Colors.white,
+      selectedItemColor: Color(0xFFD946EF),
+      unselectedItemColor: Color(0xFF94A3B8),
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+    ),
+  );
 
   // Dark Theme - Purple (Original)
   static ThemeData darkThemePurple = ThemeData(
@@ -164,6 +240,20 @@ class AppTheme {
       ),
       color: const Color(0xFF1E293B), // Slate 800
       margin: const EdgeInsets.only(bottom: 16),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: const Color(0xFF818CF8),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -224,6 +314,20 @@ class AppTheme {
       ),
       color: const Color(0xFF121212), // Dark Grey
       margin: const EdgeInsets.only(bottom: 16),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: const Color(0xFF818CF8),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
+        textStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,

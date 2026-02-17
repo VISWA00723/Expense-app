@@ -5,13 +5,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ThemeState {
   final ThemeMode mode;
   final String darkStyle; // 'black' or 'purple'
+  final String lightStyle; // 'standard' or 'pink'
 
-  const ThemeState({this.mode = ThemeMode.system, this.darkStyle = 'black'});
+  const ThemeState({
+    this.mode = ThemeMode.system, 
+    this.darkStyle = 'black',
+    this.lightStyle = 'pink', // Default to pink as requested
+  });
 
-  ThemeState copyWith({ThemeMode? mode, String? darkStyle}) {
+  ThemeState copyWith({ThemeMode? mode, String? darkStyle, String? lightStyle}) {
     return ThemeState(
       mode: mode ?? this.mode,
       darkStyle: darkStyle ?? this.darkStyle,
+      lightStyle: lightStyle ?? this.lightStyle,
     );
   }
 }
@@ -25,6 +31,7 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
     final prefs = await SharedPreferences.getInstance();
     final modeStr = prefs.getString('themeMode') ?? 'system';
     final darkStyle = prefs.getString('darkStyle') ?? 'black';
+    final lightStyle = prefs.getString('lightStyle') ?? 'pink';
     
     ThemeMode mode;
     switch (modeStr) {
@@ -33,7 +40,7 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
       default: mode = ThemeMode.system;
     }
     
-    state = ThemeState(mode: mode, darkStyle: darkStyle);
+    state = ThemeState(mode: mode, darkStyle: darkStyle, lightStyle: lightStyle);
   }
 
   Future<void> setMode(ThemeMode mode) async {
@@ -52,6 +59,12 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('darkStyle', style);
     state = state.copyWith(darkStyle: style);
+  }
+
+  Future<void> setLightStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('lightStyle', style);
+    state = state.copyWith(lightStyle: style);
   }
 }
 

@@ -9,11 +9,16 @@ import 'package:expense_app_new/models/expense_model.dart';
 import 'package:expense_app_new/database/database.dart';
 import 'package:expense_app_new/theme/app_theme.dart';
 import 'package:expense_app_new/services/api_service.dart' as api;
+import 'package:expense_app_new/services/api_service.dart' show ExpenseData;
 import 'package:intl/intl.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:expense_app_new/services/gamification_service.dart';
+import 'package:expense_app_new/widgets/app_bottom_bar.dart';
+import 'package:expense_app_new/providers/receipt_provider.dart';
 
 class AIAssistantScreen extends ConsumerStatefulWidget {
-  const AIAssistantScreen({Key? key}) : super(key: key);
+  final String? initialMessage;
+  const AIAssistantScreen({Key? key, this.initialMessage}) : super(key: key);
 
   @override
   ConsumerState<AIAssistantScreen> createState() => _AIAssistantScreenState();
@@ -29,7 +34,20 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
   void initState() {
     super.initState();
     _questionController = TextEditingController();
-    // Auto-create session if none exists? No, wait for user action or load latest.
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialMessage != null) {
+        _sendMessage(overrideText: widget.initialMessage);
+      } else {
+        // Check secure provider for receipt data
+        final secureText = ref.read(receiptTextProvider);
+        if (secureText != null) {
+          _sendMessage(overrideText: secureText);
+          // Clear the provider immediately to prevent persistence
+          ref.read(receiptTextProvider.notifier).state = null;
+        }
+      }
+    });
   }
 
   @override
@@ -39,12 +57,11 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     super.dispose();
   }
 
-  Future<void> _createNewSession([String title = 'New Chat']) async {
+  Future<void> _createNewSession(User user, [String title = 'New Chat']) async {
     final db = ref.read(databaseProvider);
-    final user = ref.read(currentUserProvider);
     
     final id = await db.createChatSession(AiChatSessionsCompanion(
-      userId: drift.Value(user!.id),
+      userId: drift.Value(user.id),
       title: drift.Value(title),
       createdAt: drift.Value(DateTime.now().toIso8601String()),
     ));
@@ -54,32 +71,125 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
     });
   }
 
-  Future<void> _sendMessage({String? overrideText}) async {
-    final text = overrideText ?? _questionController.text.trim();
-    if (text.isEmpty) return;
+  ExpenseData? _pendingExpense;
 
-    _questionController.clear();
+  Future<void> _confirmExpense() async {
+    if (_pendingExpense == null) return;
+
     setState(() => _isLoading = true);
-
     final db = ref.read(databaseProvider);
     final user = ref.read(currentUserProvider);
 
-    // Create session if needed
-    if (_currentSessionId == null) {
-      await _createNewSession(text.length > 20 ? '${text.substring(0, 20)}...' : text);
-    }
-
-    // Save user message
-    await db.addChatMessage(AiChatMessagesCompanion(
-      sessionId: drift.Value(_currentSessionId!),
-      isUser: const drift.Value(true),
-      content: drift.Value(text),
-      createdAt: drift.Value(DateTime.now().toIso8601String()),
-    ));
-
     try {
-      // Get context (expenses and categories)
-      final expenses = await db.getRecentExpenses(user!.id, 300);
+      if (user == null) throw Exception('User not found');
+
+      // Get categories to find the ID
+      final categoriesAsync = await ref.read(userCategoriesProvider(user.id).future);
+      final categories = categoriesAsync;
+      
+      final category = categories.firstWhere(
+        (c) => c.name.toLowerCase() == _pendingExpense!.category.toLowerCase(),
+        orElse: () => categories.first,
+      );
+
+      // Nuanced Date Validation
+      String finalDate;
+      try {
+        final parsedDate = DateTime.parse(_pendingExpense!.date);
+        final now = DateTime.now();
+        final minDate = now.subtract(const Duration(days: 365));
+        final maxDate = now.add(const Duration(days: 3));
+
+        if (parsedDate.isAfter(minDate) && parsedDate.isBefore(maxDate)) {
+          finalDate = _pendingExpense!.date;
+        } else {
+          finalDate = now.toIso8601String();
+        }
+      } catch (e) {
+        finalDate = DateTime.now().toIso8601String();
+      }
+
+      // Create expense in database
+      await db.into(db.expenses).insert(ExpensesCompanion(
+        userId: drift.Value(user.id),
+        title: drift.Value(_pendingExpense!.title),
+        amount: drift.Value(_pendingExpense!.amount),
+        categoryId: drift.Value(category.id),
+        date: drift.Value(finalDate),
+        notes: drift.Value(_pendingExpense!.notes),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
+
+      // Update gamification
+      final gamificationService = ref.read(gamificationServiceProvider);
+      await gamificationService.checkExpenseAchievements(user.id);
+      await gamificationService.calculateWellnessScore(user.id);
+      
+      // Invalidate providers
+      ref.invalidate(userExpensesProvider);
+      ref.invalidate(currentMonthTotalProvider);
+      ref.invalidate(recentExpensesProvider);
+      ref.invalidate(spendingByCategoryProvider);
+      
+      // Add success message
+      await db.addChatMessage(AiChatMessagesCompanion(
+        sessionId: drift.Value(_currentSessionId!),
+        isUser: const drift.Value(false),
+        content: drift.Value('✅ Expense added successfully!'),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
+
+      setState(() {
+        _pendingExpense = null;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding expense: $e')),
+      );
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _cancelExpense() {
+    setState(() {
+      _pendingExpense = null;
+    });
+    // Optional: Add a system message saying cancelled
+  }
+
+  Future<void> _sendMessage({String? overrideText}) async {
+    try {
+      final text = overrideText ?? _questionController.text.trim();
+      if (text.isEmpty) return;
+
+      _questionController.clear();
+      setState(() => _isLoading = true);
+
+      final db = ref.read(databaseProvider);
+      final user = ref.read(currentUserProvider);
+
+      if (user == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Create session if needed
+      if (_currentSessionId == null) {
+        await _createNewSession(user, text.length > 20 ? '${text.substring(0, 20)}...' : text);
+      }
+
+      // Save user message
+      await db.addChatMessage(AiChatMessagesCompanion(
+        sessionId: drift.Value(_currentSessionId!),
+        isUser: const drift.Value(true),
+        content: drift.Value(text),
+        createdAt: drift.Value(DateTime.now().toIso8601String()),
+      ));
+
+      // Get context
+      final expenses = await db.getRecentExpenses(user.id, 300);
       final expenseModels = expenses.map((e) => ExpenseModel(
         id: e.id,
         title: e.title,
@@ -90,69 +200,44 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
         createdAt: e.createdAt,
       )).toList();
 
-      // Check if user wants to add an expense
+      // Check intent
       final lowerText = text.toLowerCase();
       final isAddIntent = lowerText.contains('add expense') ||
           lowerText.contains('add expens') ||
-          (lowerText.contains('add') && RegExp(r'\d+').hasMatch(text));
+          (lowerText.contains('add') && RegExp(r'\d+').hasMatch(text)) ||
+          lowerText.startsWith('analyze receipt:');
 
       api.AIResponse response;
       
       if (isAddIntent) {
-        // Get categories for AI to choose from
         final categoriesAsync = await ref.read(userCategoriesProvider(user.id).future);
         final categories = categoriesAsync;
-        
-        if (categories.isEmpty) {
-          throw Exception('No categories available');
-        }
-        
         final categoryNames = categories.map((c) => c.name).toList();
         
-        // Call add-expense endpoint
         response = await ref.read(apiServiceProvider).addExpenseWithAI(
           naturalLanguageInput: text,
           recentExpenses: expenseModels,
           availableCategories: categoryNames,
         );
         
-        // If AI returned expense data, create the expense
         if (response.expenseData != null) {
-          final expenseData = response.expenseData!;
+          // Instead of saving, set pending expense
+          setState(() {
+            _pendingExpense = response.expenseData;
+          });
           
-          // Find matching category
-          final category = categories.firstWhere(
-            (c) => c.name.toLowerCase() == expenseData.category.toLowerCase(),
-            orElse: () => categories.first,
-          );
-          
-          // Create expense in database
-          await db.into(db.expenses).insert(ExpensesCompanion(
-            userId: drift.Value(user.id),
-            title: drift.Value(expenseData.title),
-            amount: drift.Value(expenseData.amount),
-            categoryId: drift.Value(category.id),
-            date: drift.Value(expenseData.date), // Use date from AI
-            notes: drift.Value(expenseData.notes),
-            createdAt: drift.Value(DateTime.now().toIso8601String()),
-          ));
-          
-          // Add success confirmation
+          // Add bot message asking for confirmation
           await db.addChatMessage(AiChatMessagesCompanion(
             sessionId: drift.Value(_currentSessionId!),
             isUser: const drift.Value(false),
-            content: drift.Value('✅ Expense added successfully!\n\n${response.answer}'),
+            content: drift.Value('I found the following expense details. Please confirm to add it:\n\n${response.answer}'),
             createdAt: drift.Value(DateTime.now().toIso8601String()),
           ));
           
           setState(() => _isLoading = false);
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-          }
-          return; // Exit early, we've handled the message
+          return;
         }
       } else {
-        // Regular analysis
         response = await ref.read(apiServiceProvider).analyzeExpenses(
           question: text,
           expenses: expenseModels,
@@ -167,22 +252,28 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
         createdAt: drift.Value(DateTime.now().toIso8601String()),
       ));
 
-    } catch (e) {
-      await db.addChatMessage(AiChatMessagesCompanion(
-        sessionId: drift.Value(_currentSessionId!),
-        isUser: const drift.Value(false),
-        content: drift.Value('Error: $e'),
-        createdAt: drift.Value(DateTime.now().toIso8601String()),
-      ));
+    } catch (e, stackTrace) {
+      print('Error in _sendMessage: $e');
+      print(stackTrace);
+      if (_currentSessionId != null) {
+        final db = ref.read(databaseProvider);
+        await db.addChatMessage(AiChatMessagesCompanion(
+          sessionId: drift.Value(_currentSessionId!),
+          isUser: const drift.Value(false),
+          content: drift.Value('Error: $e'),
+          createdAt: drift.Value(DateTime.now().toIso8601String()),
+        ));
+      }
     } finally {
-      setState(() => _isLoading = false);
-      // Scroll to bottom
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       }
     }
   }
@@ -214,13 +305,19 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
         ? ref.watch(chatMessagesProvider(_currentSessionId!))
         : const AsyncValue.data(<AiChatMessage>[]);
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        context.go('/dashboard');
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('AI Financial Coach'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => _createNewSession(),
+            onPressed: () => _createNewSession(user),
             tooltip: 'New Chat',
           ),
         ],
@@ -330,6 +427,72 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
             ),
           ),
 
+          // Confirmation Card
+          if (_pendingExpense != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Theme.of(context).colorScheme.primary),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Confirm Expense Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Title:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text(_pendingExpense!.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Amount:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text('₹${_pendingExpense!.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Category:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      Text(_pendingExpense!.category, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _cancelExpense,
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _confirmExpense,
+                          child: const Text('Confirm & Add'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
           // Input Area
           Container(
             padding: const EdgeInsets.all(16),
@@ -348,8 +511,9 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                 Expanded(
                   child: TextField(
                     controller: _questionController,
+                    enabled: _pendingExpense == null, // Disable input while confirming
                     decoration: InputDecoration(
-                      hintText: 'Ask your financial coach...',
+                      hintText: _pendingExpense != null ? 'Please confirm expense above...' : 'Ask your financial coach...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
@@ -366,8 +530,9 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
-                  onPressed: _isLoading ? null : () => _sendMessage(),
+                  onPressed: (_isLoading || _pendingExpense != null) ? null : () => _sendMessage(),
                   elevation: 0,
+                  backgroundColor: (_isLoading || _pendingExpense != null) ? Colors.grey : null,
                   child: _isLoading
                       ? const SizedBox(
                           width: 24,
@@ -381,23 +546,7 @@ class _AIAssistantScreenState extends ConsumerState<AIAssistantScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_circle), label: 'Add'),
-          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Expenses'),
-          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'AI Coach'),
-        ],
-        currentIndex: 3,
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) {
-          switch (index) {
-            case 0: context.go('/dashboard'); break;
-            case 1: context.go('/add'); break;
-            case 2: context.go('/list'); break;
-            case 3: break;
-          }
-        },
+      bottomNavigationBar: const AppBottomBar(currentIndex: 3),
       ),
     );
   }

@@ -42,19 +42,4 @@ class ExpenseModel {
   }
 }
 
-class AIResponse {
-  final String answer;
-  final Map<String, dynamic> summary;
 
-  AIResponse({
-    required this.answer,
-    required this.summary,
-  });
-
-  factory AIResponse.fromJson(Map<String, dynamic> json) {
-    return AIResponse(
-      answer: json['answer'] ?? '',
-      summary: json['summary'] ?? {},
-    );
-  }
-}

@@ -15,6 +15,7 @@ class Users extends Table {
   RealColumn get monthlySalary => real()();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
+  TextColumn get preferredCurrency => text().withDefault(const Constant('INR'))();
 }
 
 class Incomes extends Table {
@@ -24,6 +25,8 @@ class Incomes extends Table {
   TextColumn get source => text()();
   TextColumn get date => text()(); // ISO format: yyyy-mm-dd
   TextColumn get createdAt => text()();
+
+
 }
 
 class ExpenseCategories extends Table {
@@ -31,6 +34,8 @@ class ExpenseCategories extends Table {
   IntColumn get userId => integer()();
   TextColumn get name => text()();
   TextColumn get icon => text()();
+  IntColumn get color => integer().nullable()(); // Color value (0xFF...)
+  TextColumn get iconPath => text().nullable()(); // Path to custom image
   BoolColumn get isCustom => boolean().withDefault(const Constant(false))();
   TextColumn get createdAt => text()();
 }
@@ -44,6 +49,14 @@ class Expenses extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get date => text()(); // ISO format: yyyy-mm-dd
   TextColumn get createdAt => text()();
+  TextColumn get currencyCode => text().withDefault(const Constant('INR'))();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {id},
+  ];
+
+
 }
 
 class Budgets extends Table {
@@ -70,18 +83,120 @@ class AiChatMessages extends Table {
   TextColumn get createdAt => text()();
 }
 
-@DriftDatabase(tables: [Users, Incomes, ExpenseCategories, Expenses, Budgets, AiChatSessions, AiChatMessages])
+class UserStats extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  IntColumn get wellnessScore => integer().withDefault(const Constant(50))();
+  IntColumn get currentStreak => integer().withDefault(const Constant(0))();
+  IntColumn get longestStreak => integer().withDefault(const Constant(0))();
+  TextColumn get lastLoginDate => text().clientDefault(() => DateTime.now().toIso8601String().split('T')[0])(); // ISO format: yyyy-mm-dd
+  IntColumn get totalPoints => integer().withDefault(const Constant(0))();
+}
+
+class Achievements extends Table {
+  TextColumn get id => text()(); // String ID like 'first_expense'
+  TextColumn get title => text()();
+  TextColumn get description => text()();
+  TextColumn get iconName => text()();
+  IntColumn get points => integer()();
+  TextColumn get conditionType => text()(); // 'streak', 'budget', 'savings'
+  IntColumn get conditionValue => integer()();
+  
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class UserAchievements extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  TextColumn get achievementId => text().references(Achievements, #id)();
+  TextColumn get unlockedAt => text()();
+}
+
+class RecurringExpenses extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  TextColumn get name => text()();
+  RealColumn get amount => real()();
+  IntColumn get categoryId => integer().references(ExpenseCategories, #id)();
+  TextColumn get frequency => text()(); // 'daily', 'weekly', 'monthly', 'yearly'
+  TextColumn get nextDueDate => text()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  BoolColumn get autoPay => boolean().withDefault(const Constant(false))();
+  IntColumn get liabilityId => integer().nullable().references(Liabilities, #id)();
+}
+
+class Assets extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  TextColumn get name => text()();
+  TextColumn get type => text()(); // 'bank', 'cash', 'stock', 'real_estate', 'gold', 'other'
+  RealColumn get value => real()();
+  TextColumn get updatedAt => text()();
+}
+
+class Liabilities extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  TextColumn get name => text()();
+  TextColumn get type => text()(); // 'loan', 'credit_card', 'mortgage', 'other'
+  RealColumn get totalAmount => real()();
+  RealColumn get remainingAmount => real()();
+  RealColumn get interestRate => real().nullable()();
+  TextColumn get dueDate => text().nullable()();
+  TextColumn get updatedAt => text()();
+}
+
+class Envelopes extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  IntColumn get categoryId => integer().references(ExpenseCategories, #id)();
+  RealColumn get amount => real()(); // Allocated amount
+  IntColumn get month => integer()();
+  IntColumn get year => integer()();
+  TextColumn get updatedAt => text().clientDefault(() => DateTime.now().toIso8601String())();
+  
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE(user_id, category_id, month, year)'
+  ];
+}
+
+class EnvelopeTransfers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  IntColumn get fromEnvelopeId => integer().nullable().references(Envelopes, #id)(); // Null if from "To be Budgeted"
+  IntColumn get toEnvelopeId => integer().references(Envelopes, #id)();
+  RealColumn get amount => real()();
+  TextColumn get date => text()();
+  TextColumn get createdAt => text().clientDefault(() => DateTime.now().toIso8601String())();
+}
+
+class NetWorthHistory extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer().references(Users, #id)();
+  RealColumn get totalAssets => real()();
+  RealColumn get totalLiabilities => real()();
+  RealColumn get netWorth => real()();
+  TextColumn get date => text()(); // yyyy-mm-dd
+}
+
+@DriftDatabase(tables: [Users, Incomes, ExpenseCategories, Expenses, Budgets, AiChatSessions, AiChatMessages, UserStats, Achievements, UserAchievements, RecurringExpenses, Assets, Liabilities, NetWorthHistory, Envelopes, EnvelopeTransfers])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+        // Create indexes for new installs
+        await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)');
+        await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_category ON expenses(user_id, category_id)');
+        await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)');
       },
       onUpgrade: (Migrator m, int from, int to) async {
         // Migration from v1 to v2: Add new tables
@@ -100,6 +215,54 @@ class AppDatabase extends _$AppDatabase {
           await m.create(budgets);
           await m.create(aiChatSessions);
           await m.create(aiChatMessages);
+        }
+
+        // Migration from v3 to v4: Add Gamification and Recurring Expenses tables
+        if (from < 4) {
+          await m.create(userStats);
+          await m.create(achievements);
+          await m.create(userAchievements);
+          await m.create(recurringExpenses);
+        }
+
+        // Migration from v4 to v5: Add Currency support
+        if (from < 5) {
+          await m.addColumn(expenses, expenses.currencyCode);
+          await m.addColumn(users, users.preferredCurrency);
+        }
+
+        // Migration from v5 to v6: Add Indexes
+        if (from < 6) {
+          // Indexes are added via customConstraints, so we might need to recreate tables or just add indices manually
+          // Drift usually handles index creation if they are part of createAll, but for migration we need to add them.
+          // Since we added customConstraints, we should run custom SQL to create indexes.
+          await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)');
+          await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_expenses_user_category ON expenses(user_id, category_id)');
+          await m.issueCustomQuery('CREATE INDEX IF NOT EXISTS idx_incomes_user_date ON incomes(user_id, date)');
+        }
+
+        // Migration from v6 to v7: Add Custom Category columns
+        if (from < 7) {
+          await m.addColumn(expenseCategories, expenseCategories.color);
+          await m.addColumn(expenseCategories, expenseCategories.iconPath);
+        }
+
+        // Migration from v7 to v8: Add Net Worth tables
+        if (from < 8) {
+          await m.create(assets);
+          await m.create(liabilities);
+          await m.create(netWorthHistory);
+        }
+
+        // Migration from v8 to v9: Add Envelope Budgeting tables
+        if (from < 9) {
+          await m.create(envelopes);
+          await m.create(envelopeTransfers);
+        }
+
+        // Migration from v9 to v10: Add liabilityId to RecurringExpenses
+        if (from < 10) {
+          await m.addColumn(recurringExpenses, recurringExpenses.liabilityId);
         }
       },
     );
@@ -146,13 +309,38 @@ class AppDatabase extends _$AppDatabase {
   
   Future<List<ExpenseCategory>> getUserCategories(int userId) =>
       (select(expenseCategories)..where((tbl) => tbl.userId.equals(userId))).get();
+
+  Stream<List<ExpenseCategory>> watchCategories(int userId) =>
+      (select(expenseCategories)..where((tbl) => tbl.userId.equals(userId))).watch();
   
   Future<bool> deleteCategory(int categoryId) =>
       (delete(expenseCategories)..where((tbl) => tbl.id.equals(categoryId))).go().then((val) => val > 0);
 
+  Future<List<int>> getRecentCategoryIds(int userId, {int limit = 5}) async {
+    final query = customSelect(
+      'SELECT category_id, MAX(created_at) as last_used '
+      'FROM expenses '
+      'WHERE user_id = ? '
+      'GROUP BY category_id '
+      'ORDER BY last_used DESC '
+      'LIMIT ?',
+      variables: [Variable.withInt(userId), Variable.withInt(limit)],
+      readsFrom: {expenses},
+    );
+    
+    final result = await query.get();
+    return result.map((row) => row.read<int>('category_id')).toList();
+  }
+
   // ===== EXPENSE OPERATIONS =====
-  Future<int> insertExpense(ExpensesCompanion expense) =>
-      into(expenses).insert(expense);
+  Future<int> insertExpense(ExpensesCompanion expense) {
+    // Validate currency code
+    final allowedCurrencies = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'JPY', 'CNY'];
+    if (expense.currencyCode.present && !allowedCurrencies.contains(expense.currencyCode.value)) {
+      throw ArgumentError('Invalid currency code: ${expense.currencyCode.value}. Allowed: $allowedCurrencies');
+    }
+    return into(expenses).insert(expense);
+  }
   
   Future<List<Expense>> getUserExpenses(int userId) =>
       (select(expenses)..where((tbl) => tbl.userId.equals(userId))).get();
@@ -188,6 +376,14 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> deleteExpense(int id) =>
       (delete(expenses)..where((tbl) => tbl.id.equals(id))).go();
+
+  Future<int> getExpenseCount(int userId) {
+    final count = expenses.id.count();
+    final query = selectOnly(expenses)
+      ..addColumns([count])
+      ..where(expenses.userId.equals(userId));
+    return query.map((row) => row.read(count) ?? 0).getSingle();
+  }
   
   Future<double> getTotalByMonth(int userId, String month) async {
     final result = await customSelect(
@@ -240,12 +436,31 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Get spending by category with IDs for color assignment
-  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId) {
-    return customSelect(
-      '''SELECT ec.id, ec.name, SUM(e.amount) as total FROM expenses e 
+  Stream<List<CategorySpending>> watchSpendingByCategoryWithId(int userId, {String? startDate, String? endDate, int? categoryId}) {
+    String query = '''SELECT ec.id, ec.name, SUM(e.amount) as total FROM expenses e 
          JOIN expense_categories ec ON e.category_id = ec.id 
-         WHERE e.user_id = ? GROUP BY ec.id, ec.name''',
-      variables: [Variable.withInt(userId)],
+         WHERE e.user_id = ?''';
+    
+    final variables = <Variable>[Variable.withInt(userId)];
+
+    if (startDate != null) {
+      query += ' AND e.date >= ?';
+      variables.add(Variable.withString(startDate));
+    }
+    if (endDate != null) {
+      query += ' AND e.date <= ?';
+      variables.add(Variable.withString(endDate));
+    }
+    if (categoryId != null) {
+      query += ' AND e.category_id = ?';
+      variables.add(Variable.withInt(categoryId));
+    }
+
+    query += ' GROUP BY ec.id, ec.name';
+
+    return customSelect(
+      query,
+      variables: variables,
       readsFrom: {expenses, expenseCategories},
     ).watch().map((rows) {
       return rows.map((row) => CategorySpending(
@@ -287,6 +502,43 @@ class AppDatabase extends _$AppDatabase {
         ..where((tbl) => tbl.sessionId.equals(sessionId))
         ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc)])
       ).watch();
+
+  // ===== NET WORTH OPERATIONS =====
+  Future<int> addAsset(AssetsCompanion asset) => into(assets).insert(asset);
+  Future<bool> updateAsset(Asset asset) => update(assets).replace(asset);
+  Future<int> deleteAsset(int id) => (delete(assets)..where((t) => t.id.equals(id))).go();
+  Stream<List<Asset>> watchAssets(int userId) => (select(assets)..where((t) => t.userId.equals(userId))).watch();
+  Future<List<Asset>> getAssets(int userId) => (select(assets)..where((t) => t.userId.equals(userId))).get();
+
+  Future<int> addLiability(LiabilitiesCompanion liability) => into(liabilities).insert(liability);
+  Future<bool> updateLiability(Liability liability) => update(liabilities).replace(liability);
+  Future<int> deleteLiability(int id) => (delete(liabilities)..where((t) => t.id.equals(id))).go();
+  Stream<List<Liability>> watchLiabilities(int userId) => (select(liabilities)..where((t) => t.userId.equals(userId))).watch();
+  Future<List<Liability>> getLiabilities(int userId) => (select(liabilities)..where((t) => t.userId.equals(userId))).get();
+
+  Future<int> addNetWorthSnapshot(NetWorthHistoryCompanion snapshot) => into(netWorthHistory).insert(snapshot);
+  Stream<List<NetWorthHistoryData>> watchNetWorthHistory(int userId) => 
+      (select(netWorthHistory)
+        ..where((t) => t.userId.equals(userId))
+        ..orderBy([(t) => OrderingTerm(expression: t.date, mode: OrderingMode.asc)])
+      ).watch();
+
+  // ===== ENVELOPE BUDGETING OPERATIONS =====
+  Future<int> addEnvelope(EnvelopesCompanion envelope) => into(envelopes).insert(envelope);
+  Future<bool> updateEnvelope(Envelope envelope) => update(envelopes).replace(envelope);
+  Future<int> deleteEnvelope(int id) => (delete(envelopes)..where((t) => t.id.equals(id))).go();
+  
+  Stream<List<Envelope>> watchEnvelopes(int userId, int month, int year) => 
+      (select(envelopes)
+        ..where((t) => t.userId.equals(userId) & t.month.equals(month) & t.year.equals(year))
+      ).watch();
+
+  Future<Envelope?> getEnvelope(int userId, int categoryId, int month, int year) =>
+      (select(envelopes)
+        ..where((t) => t.userId.equals(userId) & t.categoryId.equals(categoryId) & t.month.equals(month) & t.year.equals(year))
+      ).getSingleOrNull();
+
+  Future<int> addEnvelopeTransfer(EnvelopeTransfersCompanion transfer) => into(envelopeTransfers).insert(transfer);
 }
 
 // Helper class for category spending data
@@ -300,6 +552,18 @@ class CategorySpending {
     required this.categoryName,
     required this.totalAmount,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CategorySpending &&
+          runtimeType == other.runtimeType &&
+          categoryId == other.categoryId &&
+          categoryName == other.categoryName &&
+          totalAmount == other.totalAmount;
+
+  @override
+  int get hashCode => categoryId.hashCode ^ categoryName.hashCode ^ totalAmount.hashCode;
 }
 
 LazyDatabase _openConnection() {

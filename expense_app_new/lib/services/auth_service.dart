@@ -1,14 +1,16 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:expense_app_new/database/database.dart';
 import 'package:expense_app_new/services/session_service.dart';
+import 'package:expense_app_new/services/gamification_service.dart';
 import 'package:intl/intl.dart';
 
 class AuthService {
   final AppDatabase db;
   final SessionService? sessionService;
+  final GamificationService? gamificationService;
   User? _currentUser;
 
-  AuthService({required this.db, this.sessionService});
+  AuthService({required this.db, this.sessionService, this.gamificationService});
 
   User? get currentUser => _currentUser;
 
@@ -41,7 +43,12 @@ class AuthService {
         updatedAt: drift.Value(now),
       );
 
-      await db.createUser(user);
+      final userId = await db.createUser(user);
+      
+      // Initialize achievements for new user
+      if (gamificationService != null) {
+        await gamificationService!.ensureInitialized(userId);
+      }
       
       // Auto-login after signup
       return await login(email: email, password: password);
@@ -67,6 +74,12 @@ class AuthService {
       }
 
       _currentUser = user;
+      
+      // Update streak
+      if (gamificationService != null) {
+        await gamificationService!.ensureInitialized(user.id);
+        await gamificationService!.updateStreak(user.id);
+      }
       
       // Save session for persistence
       if (sessionService != null) {
@@ -177,5 +190,8 @@ class AuthService {
       print('Change password error: $e');
       return false;
     }
+  }
+  Future<User?> getUserByEmail(String email) async {
+    return db.getUserByEmail(email);
   }
 }
